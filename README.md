@@ -1,2 +1,2 @@
 # AlittleTool
-A tool that utilizing bulk/visium information to identify 'co-occurance' relationship among celltypes
+A tool that utilize bulk/visium information to identify 'co-occurance' relationship among celltypes
