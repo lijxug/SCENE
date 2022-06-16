@@ -1,0 +1,16 @@
+Package: AlittleTool
+Title: What the Package Does (One Line, Title Case)
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Jason",
+           family = "Li",
+           role = c("aut", "cre"),
+           email = "lijxug@gmail.com",
+           comment = c(ORCID = "0000-0002-8720-1344"))
+Description:
+  A tool that utilize bulk/visium information to identify 'co-occurance' relationship among celltypes.
+License: GPL (>= 3)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.0
