@@ -1,7 +1,7 @@
 Package: AlittleTool
 Title: What the Package Does (One Line, Title Case)
 Version: 0.0.0.9000
-Authors@R: 
+Authors@R:
     person(given = "Jason",
            family = "Li",
            role = c("aut", "cre"),

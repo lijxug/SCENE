@@ -532,7 +532,7 @@ preprocessing = function(sc_data,
                          quantile_normalization = F,
                          downsample_size = NULL,
                          draw_now = T,
-                         verbose = T, ...) {
+                         verbose = T, ...){
   
   checkmate::assert(all(colnames(sc_data) == names(celltypes)))
   
@@ -586,35 +586,35 @@ preprocessing = function(sc_data,
   #     sum(plt_obj$hvg_df$selected)
   #   ))
   
-  # if(verbose) message('Identifying HVGs for bulk data')
-  # bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1-top_gene_ratio)
-  # plt_obj = bulk_hvg_obj
-  # 
-  # p_bulk = plt_obj$hvg_df %>%
-  #   ggplot(aes(x = log10(means), y = log10(vars))) +
-  #   geom_point(shape = 'o', aes(color = selected)) +
-  #   geom_line(
-  #     data = data.frame(x = plt_obj$fit$x %>% as.numeric(), y = plt_obj$fit$fitted),
-  #     aes(x = x, y = y),
-  #     color = 'black'
-  #   ) +
-  #   theme_classic(base_size = 18) +
-  #   scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
-  #   labs(title = sprintf("TCGA: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
-  # 
-  # if(draw_now){
-  #   # print(p_sc)
-  #   print(p_bulk)
-  # }
+  if(verbose) message('Identifying HVGs for bulk data')
+  bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1-top_gene_ratio)
+  plt_obj = bulk_hvg_obj
+
+  p_bulk = plt_obj$hvg_df %>%
+    ggplot(aes(x = log10(means), y = log10(vars))) +
+    geom_point(shape = 'o', aes(color = selected)) +
+    geom_line(
+      data = data.frame(x = plt_obj$fit$x %>% as.numeric(), y = plt_obj$fit$fitted),
+      aes(x = x, y = y),
+      color = 'black'
+    ) +
+    theme_classic(base_size = 18) +
+    scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
+    labs(title = sprintf("TCGA: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
+
+  if(draw_now){
+    # print(p_sc)
+    print(p_bulk)
+  }
   
   
   # Filter for HVG for matrices 
   if(verbose) message('Extracting HVGs')
   inter_genes = intersect(rownames(bulk_norm_flt_mt), rownames(sc_flt_data))
-  # all_variable_genes = union(bulk_hvg_obj$hvg_df$featureID[bulk_hvg_obj$hvg_df$selected],
-  #                            rownames(sc_flt_data)) %>% unique
-  all_variable_genes = union(rownames(bulk_norm_flt_mt),
+  all_variable_genes = union(bulk_hvg_obj$hvg_df$featureID[bulk_hvg_obj$hvg_df$selected],
                              rownames(sc_flt_data)) %>% unique
+  # all_variable_genes = union(rownames(bulk_norm_flt_mt),
+                             # rownames(sc_flt_data)) %>% unique
   
   chosen_genes = unique(intersect(inter_genes, all_variable_genes))
   if(verbose) message(sprintf("%d genes chosen.", length(chosen_genes)))
@@ -703,13 +703,14 @@ preprocessing = function(sc_data,
       merge_MM = merge_MM,
       meta.data = meta.data,
       # plot_sc = p_sc,
-      # plot_bulk = p_bulk,
+      plot_bulk = p_bulk,
       logarithmetic = logarithmetic,
       scale = scaling,
       quantile_normalization = quantile_normalization
     )
   )
 }
+
 
 # Determine K ----
 
