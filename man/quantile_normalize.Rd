@@ -7,10 +7,13 @@
 quantile_normalize(mt, verbose = T)
 }
 \arguments{
-\item{mt}{a matrix to norm by columns}
+\item{mt}{Matrix to norm by columns}
 
-\item{verbose}{logical}
+\item{verbose}{Logical,  print the log.}
+}
+\value{
+A quantile-normalized matrix.
 }
 \description{
-Quantile normalization
+Perform quantile normalization column-wisely on a matrix.
 }

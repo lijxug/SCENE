@@ -7,8 +7,11 @@
 calc_TPM(x)
 }
 \arguments{
-\item{x}{}
+\item{x}{Named vector of gene counts}
+}
+\value{
+Named vector of TPM
 }
 \description{
-Calculate TPM
+Calculate TPM, the length information is provided by R package \code{annotables}
 }

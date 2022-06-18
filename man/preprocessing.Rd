@@ -27,11 +27,11 @@ preprocessing(
 
 \item{top_gene_ratio}{Numeric, top \% of HVG genes to remain}
 
-\item{logarithmetic}{Logical}
+\item{logarithmetic}{Logical, whether to log-transformed the data}
 
-\item{scaling}{Logical, if scaled by Frobenius norm}
+\item{scaling}{Logical, whether to scale data by Frobenius norm}
 
-\item{quantile_normalization}{Logical}
+\item{quantile_normalization}{Logical, whether to perform quantile normalization}
 
 \item{downsample_size}{}
 
@@ -39,6 +39,9 @@ preprocessing(
 
 \item{verbose}{Logical, default TRUE}
 }
+\value{
+A named list
+}
 \description{
-Merge single-cell and bulk data
+Merge single cells and bulks/spots into one expression matrix.
 }

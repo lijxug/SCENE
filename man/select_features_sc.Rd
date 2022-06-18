@@ -15,17 +15,17 @@ select_features_sc(
 \arguments{
 \item{X}{Matrix, genes x cells, a library-size-normalized matrix or a UMI count matrix or a TPM matrix.}
 
-\item{celltypes}{Named vector}
+\item{celltypes}{Cell-named vector to specify}
 
-\item{batches}{Named vector}
+\item{batches}{Cell-named vector to specify the batch information, default = NULL, not run}
 
 \item{method}{String. Can be 'ttest' or 'wilcox'. Default = 'wilcox'}
 
 \item{n_cores}{Integer. Default using all cores.}
 }
 \value{
-A string vector of genes
+A differential expression table.
 }
 \description{
-Select features for single-cell data
+Using differential expression to select feature genes for single-cell data.
 }

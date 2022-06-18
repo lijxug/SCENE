@@ -65,10 +65,15 @@ calc_jacind_from_cor = function(x_cor_mt, y_cor_mt){
 }
 
 #' Quantile normalization
-#' @param mt a matrix to norm by columns
-#' @param verbose logical
+#'
+#' Perform quantile normalization column-wisely on a matrix.
+#' @param mt Matrix to norm by columns
+#' @param verbose Logical,  print the log.
+#' @return A quantile-normalized matrix.
+#' @export
+#'
 quantile_normalize = function(mt, verbose = T){
-  # can adapt the qnorm Rcpp from preprocessCore::normalize.quantiles, 
+  # can adapt the qnorm Rcpp from preprocessCore::normalize.quantiles,
   # however, noted that this function yield a slightly different results 
   # that in some columns the minimum values would differ from others.
   # Try S3 method in the future
@@ -145,6 +150,16 @@ sweep_MM <- function(x, margin, stats, fun = "*") {
   return(x)
 }
 
+#' Calculate normalized expresssion for UMI-based data
+#'
+#' 'calc_normExpr.Droplet' is a wrapper to calculate the normalized expression for droplet data.
+#' It would calculate the normalized expresssion as: 'x/sum(x) * factor' for each sample.
+#' @param x Matrix or sparse matrix. Each column specify a sample.
+#' @param factor A number define the resulting library size for each sample after the normalization. Default 10000.
+#' @param logarithmetic Logical. Should the results be log-transformed?
+#' @return Matrix
+#' @export
+#'
 calc_normExpr.Droplet = function(x,
                                  factor = 10000,
                                  logarithmetic = T) {
@@ -169,6 +184,15 @@ calc_normExpr.Droplet = function(x,
   }
 }
 
+#' Calculate normalized expresssion for full-length RNA data
+#'
+#' 'calc_normExpr.TPM' is a wrapper to calculate the normalized expression for count data derived from full-length protocol.
+#' It would calculate the normalized expresssion as TPM for each sample.
+#' @param x Matrix or sparse matrix. Each column specify a sample.
+#' @param logarithmetic Logical. Should the results be log-transformed?
+#' @return Matrix
+#' @export
+#'
 calc_normExpr.TPM = function(x, logarithmetic = T){
   y = apply(x, 2, FUN = calc_TPM)
   if(logarithmetic){
@@ -179,12 +203,16 @@ calc_normExpr.TPM = function(x, logarithmetic = T){
 }
 
 #' Calculate TPM
-#' @param x 
+#'
+#' Calculate TPM, the length information is provided by R package `annotables`
+#' @param x Named vector of gene counts
+#' @return Named vector of TPM
+#'
 calc_TPM = function(x){
  require(annotables)
   length_vec = setNames(nm = annotables::grch38$symbol, 
                         abs(annotables::grch38$start - annotables::grch38$end))
-  length_vec = length_vec/1000 # per kilobases
+  length_vec = length_vec/1000 # per kilobass
   x_length = length_vec[names(x)]
   x_length = x_length[!is.na(x_length)]
   
@@ -202,14 +230,17 @@ calc_TPM = function(x){
 }
 
 
-# Preprocessing ----
 #' Select features for single-cell data
+#' 
+#' Using differential expression to select feature genes for single-cell data. 
 #' @param X Matrix, genes x cells, a library-size-normalized matrix or a UMI count matrix or a TPM matrix.
-#' @param celltypes Named vector
-#' @param batches Named vector
+#' @param celltypes Cell-named vector to specify
+#' @param batches Cell-named vector to specify the batch information, default = NULL, not run
 #' @param method String. Can be 'ttest' or 'wilcox'. Default = 'wilcox'
 #' @param n_cores Integer. Default using all cores.
-#' @return A string vector of genes
+#' @return A differential expression table.
+#' @export
+#' 
 select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n_cores = 0){
   require(JasonToolBox)
   if(n_cores == 0)
@@ -327,10 +358,15 @@ dea.wilcox = function (mt1_origin, mt2_origin, down_size = 5000, n_cores = 1, on
 }
 
 
-#' Select features using loess fit
+#' Select features for bulk data
+#' 
+#' Choose highly variable genes, using 'vst' algorithm adapted from Seurat.
 #' @param X a library-size-normalized matrix or a UMI count matrix or a TPM matrix.
 #' @param loess_span smooth factor for loess, default = 0.3
 #' @param high_quantile quantile for selecting the variable genes, 
+#' @return A list object with two named field: *fit* for loess fit object; *hvg_df* for a dataframe with highly variable genes.
+#' @export
+#' 
 select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
   require(JasonToolBox)
   hvg_df = data.frame(featureID = rownames(X), means = rowMeans(X))
@@ -360,6 +396,8 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 
 
 #' Merge cells into metacell by clusters
+#' 
+#' Merge single cell data into meta cells. To be deprecated.
 #' @param expr_mt Expression matrix
 #' @param celltypes should be a cell-id-named vector of cell types
 #' @param target_number Number of cells to merge into one, default = 30.
@@ -367,6 +405,8 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #' @param double_check Logical,
 #' @param n_cores Use when double_check, default using all cores available
 #' @param n_perm Use when double_check, default = 100
+#' @return
+#' 
 mergeCells = function(expr_mt, celltypes, target_number = 30, K, k_beta = 2, double_check = F, ...){
   require(RcppParallel)
   require(proxyC)
@@ -513,16 +553,22 @@ mergeCells = function(expr_mt, celltypes, target_number = 30, K, k_beta = 2, dou
 
 
 #' Merge single-cell and bulk data
+#' 
+#' Merge single cells and bulks/spots into one expression matrix.
+#' 
 #' @param sc_data Sparse matrix of normalized counts or TPM, genes x cells
 #' @param bulk_data Sparse matrix of TPM, genes x samples
 #' @param celltypes Named vector, should be a cell-id-named vector of cell types
 #' @param top_gene_ratio Numeric, top % of HVG genes to remain
-#' @param logarithmetic Logical
-#' @param scaling Logical, if scaled by Frobenius norm
-#' @param quantile_normalization Logical
+#' @param logarithmetic Logical, whether to log-transformed the data
+#' @param scaling Logical, whether to scale data by Frobenius norm
+#' @param quantile_normalization Logical, whether to perform quantile normalization
 #' @param downsample_size 
 #' @param draw_now Logical, default = T
 #' @param verbose Logical, default TRUE
+#' @return A named list
+#' @export
+#' 
 preprocessing = function(sc_data,
                          bulk_data,
                          celltypes, 
@@ -534,7 +580,7 @@ preprocessing = function(sc_data,
                          draw_now = T,
                          verbose = T, ...){
   
-  checkmate::assert(all(colnames(sc_data) == names(celltypes)))
+  stopifnot(all(colnames(sc_data) == names(celltypes)))
   
   if(!is.null(downsample_size)){
     if (verbose) message('Downsampling')

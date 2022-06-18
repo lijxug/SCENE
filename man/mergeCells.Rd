@@ -30,5 +30,5 @@ mergeCells(
 \item{n_perm}{Use when double_check, default = 100}
 }
 \description{
-Merge cells into metacell by clusters
+Merge single cell data into meta cells. To be deprecated.
 }
