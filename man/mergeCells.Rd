@@ -29,6 +29,9 @@ mergeCells(
 
 \item{n_perm}{Use when double_check, default = 100}
 }
+\value{
+A named list
+}
 \description{
 Merge single cell data into meta cells. To be deprecated.
 }

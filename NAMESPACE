@@ -2,7 +2,9 @@
 
 export(calc_normExpr.Droplet)
 export(calc_normExpr.TPM)
+export(identifyKnee)
 export(preprocessing)
 export(quantile_normalize)
 export(select_features)
 export(select_features_sc)
+importFrom(dplyr,`%>%`)

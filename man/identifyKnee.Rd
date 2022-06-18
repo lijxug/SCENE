@@ -18,7 +18,7 @@ identifyKnee(x, y, direction = "down", draw_now = T, ...)
 \item{...}{Other parameters for kneer::create_knee_locator}
 }
 \value{
-A numeric or a null
+A numeric or NULL
 }
 \description{
 Identify knee

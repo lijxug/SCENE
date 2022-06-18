@@ -63,7 +63,7 @@ devtools::build_readme()
 # devtools::load_all()
 # devtools::check()
 
-system('git add .')
-system(paste0("git commit -m '", opts$message, "'"))
+# system('git add .')
+# system(paste0("git commit -m '", opts$message, "'"))
 
 

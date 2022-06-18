@@ -35,6 +35,10 @@ This is a basic example which shows you how to solve a common problem:
 
 ``` r
 library(AlittleTool)
+#> Warning: replacing previous import 'lifecycle::last_warnings' by
+#> 'rlang::last_warnings' when loading 'pillar'
+#> Warning: replacing previous import 'lifecycle::last_warnings' by
+#> 'rlang::last_warnings' when loading 'tibble'
 ## basic example code
 ```
 

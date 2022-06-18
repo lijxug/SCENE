@@ -405,7 +405,7 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #' @param double_check Logical,
 #' @param n_cores Use when double_check, default using all cores available
 #' @param n_perm Use when double_check, default = 100
-#' @return
+#' @return A named list
 #' 
 mergeCells = function(expr_mt, celltypes, target_number = 30, K, k_beta = 2, double_check = F, ...){
   require(RcppParallel)
@@ -803,19 +803,24 @@ findKnee = function(x, y , ...) {
   return(kneer_obj)
 }
  
+
+#' Identify knee
+#' 
+#' @param x Numeric vector, x coordinates
+#' @param y Numeric vector, y coordinates.
+#' @param direction String, either 'up' or 'down'
+#' @param draw_now Logical, if print the plot now
+#' @param ... Other parameters for kneer::create_knee_locator
+#' @return A numeric or NULL 
+#' @export
+#' @importFrom dplyr `%>%`
+#'
 identifyKnee = function(x, y, direction = 'down', draw_now = T, ...){
-  #' Identify knee
-  #' @param x Numeric vector, x coordinates
-  #' @param y Numeric vector, y coordinates.
-  #' @param direction String, either 'up' or 'down'
-  #' @param draw_now Logical, if print the plot now
-  #' @param ... Other parameters for kneer::create_knee_locator
-  #' @return A numeric or a null
   
-  require(dplyr)
-  require(ggplot2)
-  require(kneer)
-  require(patchwork)
+  # require(dplyr)
+  # require(ggplot2)
+  # require(kneer)
+  # require(patchwork)
   
   n_cat = length(unique(x))
   plt_df = data.frame(x, y) %>% arrange(x)
