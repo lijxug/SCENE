@@ -1,12 +1,20 @@
 #' @import ggplot2
 #' @import patchwork
 #' @import dplyr 
+#' @import tictoc
 NULL
 
 # Calculation ----
-calc_CC = function(x){
-  w_dist = dist(x)
-  w_dist_mt = as.matrix(w_dist)
+calc_CC = function(x, ...){
+  args = list(...)
+  n_cores = ifelse(is.null(args$n_cores), 1, args$n_cores)
+  # w_dist_mt = as.matrix(dist(x))
+  if(n_cores == 1) {
+    w_dist_mt = as.matrix(stats::dist(x))
+  } else {
+    w_dist_mt = as.matrix(parallelDist::parDist(x, threads = n_cores))
+  }
+  # w_dist_mt = as.matrix(w_dist)
   hc_obj = hclust(w_dist)
   cc_dist = cophenetic(hc_obj)
   cc_mt = as.matrix(cc_dist)
@@ -1110,15 +1118,20 @@ determineK_runNMF = function(merge_mt, Ks2run, n_reps, n_cores = 0, draw_now = F
   
 }
 
+#' Determine K to use
+#' 
+#' Determine the knee point using `kneer` to identify the optimum K to run cNMF.
+#' @param data_obj Data object from `determineK_runNMF`
+#' @param draw_now Logical. If print out the plots.
+#' @param verbose Logical. If print the logs.
+#' @return A named list with optimum K and data/objects to support it.
+#' @export
+#' 
 determineK = function(data_obj, draw_now = F, verbose = T, ...) {
-  #' Determine K to use
-  #' @param data_obj Data object from `determineK_runNMF`
-  #' @param draw_now Logical. If print out the plots.
-  #' @param verbose Logical. If print the logs.
-  require(tictoc)
-  require(RcppML)
-  require(ggplot2)
-  require(dplyr)
+  # require(tictoc)
+  # require(RcppML)
+  # require(ggplot2)
+  # require(dplyr)
   
   # return(list(
   #   data_df = list(entropy_df = entropy_df, jacind_df = jac_index_df, time_df = res_monitor_df),
@@ -1191,6 +1204,19 @@ determineK = function(data_obj, draw_now = F, verbose = T, ...) {
   ))
 }
 
+#' runcNMF 
+#' 
+#' run cNMF to extract programs
+#' @param merge_mt Matrix or sparse matrix. Normalized expression matrix of single-cell and bulk. Genes x Samples.
+#' @param k Integer. K programs to run.
+#' @param n_reps Integer. Number of replication for each K.
+#' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
+#' @param row_subset Double, \(0-1\]. Proportion of rows to sample. Default = 1.
+#' @param col_subset Double, \(0-1\]. Proportion of columns to sample. Default = 1.
+#' @param verbose Logical. Whether to print the logs.
+#' @return A list of all the NMF results.
+#' @export
+#' 
 runcNMF = function(merge_mt,
                    k,
                    n_reps,
@@ -1198,14 +1224,6 @@ runcNMF = function(merge_mt,
                    row_subset = 1,
                    col_subset = 1,
                    verbose = T) {
-  #' run cNMF to extract programs
-  #' @param merge_mt Matrix or sparse matrix. Normalized expression matrix of single-cell and bulk. Genes x Samples.
-  #' @param k Integer. K programs to run.
-  #' @param n_reps Integer. Number of replication for each K.
-  #' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
-  #' @param row_subset Double, \(0-1\]. Proportion of rows to sample. Default = 1.
-  #' @param col_subset Double, \(0-1\]. Proportion of columns to sample. Default = 1.
-  #' @param verbose Logical. If print the logs.
   
   require(tictoc)
   require(RcppML)
@@ -1270,25 +1288,32 @@ runcNMF = function(merge_mt,
   return(fnmf_model_lst)
 }
 
+
+
+#' Identify consensus programs
+#' 
+#' A wrapper function to merge similar programs into one
+#' @param NMFs List of Results from repetitive NMF runs.
+#' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
+#' @param n_reps Integer. Number of replication for each K.
+#' @param reps_ratio Double between \(0, 1\). Keeping clusters that have at least `round(n_reps * reps_ratio)` programs.
+#' @param return_plot Logical. If return the plots for checking.
+#' @param verbose Logical. If print the logs.
+#' @return A named list with consensus programs
+#' @export
+#' 
 identifyConsensusProgram = function(NMFs,
                                     n_reps,
                                     n_cores = 0,
                                     reps_ratio = 0.05, 
                                     return_plot = F,
                                     verbose = T) {
-  #' Identify consensus programs
-  #' @param NMFs List of Results from repetitive NMF runs.
-  #' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
-  #' @param n_reps Integer. Number of replication for each K.
-  #' @param reps_ratio Double between \(0, 1\). Keeping clusters that have at least `round(n_reps * reps_ratio)` programs.
-  #' @param return_plot Logical. If return the plots for checking.
-  #' @param verbose Logical. If print the logs.
   
-  require(pbapply)
-  require(tictoc)
-  require(pbmcapply)
+  # require(pbapply)
+  # require(tictoc)
+  # require(pbmcapply)
   # require(parallelDist)
-  require(igraph)
+  # require(igraph)
   
   if (n_cores == 0) {
     message('Using all cores possible: ', parallel::detectCores() - 1)
@@ -1331,14 +1356,15 @@ identifyConsensusProgram = function(NMFs,
   # Calculate distance with 10% NA
   if (verbose)
     message('Calculating distance, this could take a while...')
-  tic()
-  norm_dist_obj = stats::dist(normh_all_mt)
-  toc()
-  norm_dist_mt = as.matrix(norm_dist_obj)
+  if (verbose)
+    tic()
+  # norm_dist_obj = stats::dist(normh_all_mt)
+  # norm_dist_mt = as.matrix(norm_dist_obj)
+  norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
+  if (verbose)
+    toc()
   
   # norm_dist_mtmt = as.matrix(norm_dist_mt)
-  # norm_dist_mt2 = parallelDist::parDist(normh_all_mt, threads = n_cores)
-  # norm_dist_mt2mt = as.matrix(norm_dist_mt2)
   
   if(return_plot) {
     p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% enframe() %>%
@@ -1453,11 +1479,18 @@ identifyConsensusProgram = function(NMFs,
   }
 }
 
-processConsensusProgram = function(merged_program_mt, seurat_obj, program_cutoff = 0.1){
-	#' Process the consensus programs
-  #' @param merged_program_mt A matrix
-  #' @param seurat_obj A seurat object
-  #' @param program_cutoff Double, default = 0.1, between (0-1]
+#' Process the consensus programs
+#' 
+#' A wrapper function to process the consensus programs.
+#' @param merged_program_mt A matrix
+#' @param seurat_obj A seurat object
+#' @param program_cutoff Double, default = 0.1, between (0-1]
+#' @return A processed matrix
+#' @export
+#' 
+processConsensusProgram = function(merged_program_mt,
+                                   seurat_obj,
+                                   program_cutoff = 0.1) {
   
   consensus_H_mt = apply(merged_program_mt, 1, function(x) { x / sum(x) }) # normalize by each program
   
@@ -1476,16 +1509,19 @@ processConsensusProgram = function(merged_program_mt, seurat_obj, program_cutoff
 }
 
 
-
-
+#' Check and plot the consensus programs
+#' 
+#' @param seurat_obj A seurat object
+#' @param program_mt A program matrix
+#' @param program_cutoff Double, default = 0.1, between (0-1]
+#' @return A named list
+#' @export
+#' 
 checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
-  #' Check consensus program values
-  #' @param seurat_obj A seurat object
-  #' @param program_mt A program matrix
-  #' @param program_cutoff Double, default = 0.1, between (0-1]
   
-  require(ggplot2)
-  require(dplyr)
+  # require(ggplot2)
+  # require(dplyr)
+  # require(Seurat) # Seurat dependencies should be removed in the future.
   
   plt_tbl = as.data.frame(t(program_mt), stringAsfactor = F) %>% 
     mutate(.before = "MergedProgram_01", cellID = colnames(program_mt))
@@ -1538,6 +1574,16 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
 }
 
 # Correlative graph ----
+
+#' Check consensus program values
+#' 
+#' @param program_mt Matrix, processed
+#' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
+#' @param celltypes Named vector, should be a cell-id-named vector of cell types
+#' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
+#' @return A named list with the correlative information between celltypes.
+#' @export
+#' 
 calcCorrelative = function(program_mt,
                            sources,
                            celltypes,
@@ -1545,12 +1591,6 @@ calcCorrelative = function(program_mt,
                            rho_cutoff = 0,
                            pval_cutoff = 0.1) {
   
-  #' Check consensus program values
-  #' @param program_mt Matrix, processed
-  #' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
-  #' @param celltypes Named vector, should be a cell-id-named vector of cell types
-  #' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
-  #' 
   require(dplyr)
   
   
@@ -1633,11 +1673,15 @@ calcCorrelative = function(program_mt,
 
 
 
+#' Check and plot the correlation between two programs
+#' 
+#' @param x_label Name of a program, x
+#' @param y_label Name of a program, y
+#' @param test_obj A test object
+#' @return Ggplot objects
+#' @export
+#' 
 checkCorrelative = function(x_label, y_label, test_obj, plt_obj){
-  #' Check the correlation between two programs
-  #' @param x_label Name of a program, x
-  #' @param y_label Name of a program, y
-  #' @param test_obj A test object
   require(dplyr)
   require(ggplot2)
   require(patchwork)

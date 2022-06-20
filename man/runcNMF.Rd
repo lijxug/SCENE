@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{runcNMF}
 \alias{runcNMF}
-\title{run cNMF to extract programs}
+\title{runcNMF}
 \usage{
 runcNMF(
   merge_mt,
@@ -27,7 +27,10 @@ runcNMF(
 
 \item{col_subset}{Double, \(0-1]. Proportion of columns to sample. Default = 1.}
 
-\item{verbose}{Logical. If print the logs.}
+\item{verbose}{Logical. Whether to print the logs.}
+}
+\value{
+A list of all the NMF results.
 }
 \description{
 run cNMF to extract programs

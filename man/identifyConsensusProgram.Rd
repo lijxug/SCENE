@@ -26,6 +26,9 @@ identifyConsensusProgram(
 
 \item{verbose}{Logical. If print the logs.}
 }
+\value{
+A named list with consensus programs
+}
 \description{
-Identify consensus programs
+A wrapper function to merge similar programs into one
 }

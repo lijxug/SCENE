@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{checkCorrelative}
 \alias{checkCorrelative}
-\title{Check the correlation between two programs}
+\title{Check and plot the correlation between two programs}
 \usage{
 checkCorrelative(x_label, y_label, test_obj, plt_obj)
 }
@@ -13,6 +13,9 @@ checkCorrelative(x_label, y_label, test_obj, plt_obj)
 
 \item{test_obj}{A test object}
 }
+\value{
+Ggplot objects
+}
 \description{
-Check the correlation between two programs
+Check and plot the correlation between two programs
 }

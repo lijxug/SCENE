@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{checkConsensusProgram}
 \alias{checkConsensusProgram}
-\title{Check consensus program values}
+\title{Check and plot the consensus programs}
 \usage{
 checkConsensusProgram(seurat_obj, program_mt, program_cutoff = 0.1)
 }
@@ -13,6 +13,9 @@ checkConsensusProgram(seurat_obj, program_mt, program_cutoff = 0.1)
 
 \item{program_cutoff}{Double, default = 0.1, between (0-1]}
 }
+\value{
+A named list
+}
 \description{
-Check consensus program values
+Check and plot the consensus programs
 }

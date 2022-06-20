@@ -13,6 +13,9 @@ determineK(data_obj, draw_now = F, verbose = T, ...)
 
 \item{verbose}{Logical. If print the logs.}
 }
+\value{
+A named list with optimum K and data/objects to support it.
+}
 \description{
-Determine K to use
+Determine the knee point using \code{kneer} to identify the optimum K to run cNMF.
 }

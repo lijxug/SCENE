@@ -13,6 +13,9 @@ processConsensusProgram(merged_program_mt, seurat_obj, program_cutoff = 0.1)
 
 \item{program_cutoff}{Double, default = 0.1, between (0-1]}
 }
+\value{
+A processed matrix
+}
 \description{
-Process the consensus programs
+A wrapper function to process the consensus programs.
 }

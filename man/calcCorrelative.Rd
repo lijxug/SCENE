@@ -22,6 +22,9 @@ calcCorrelative(
 
 \item{nonzero_ratio}{Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)}
 }
+\value{
+A named list with the correlative information between celltypes.
+}
 \description{
 Check consensus program values
 }
