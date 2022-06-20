@@ -16,4 +16,5 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.0
 Imports:
   Matrix, annotables, parallel, pbmcapply, pbapply,
-  dplyr, ggplot2, kneer, patchwork
+  dplyr, ggplot2, kneer, patchwork, kneer, RcppML, 
+  tictoc

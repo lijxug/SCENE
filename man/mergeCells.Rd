@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{mergeCells}
 \alias{mergeCells}
-\title{Merge cells into metacell by clusters}
+\title{Merge cells into metacell by clusters (deprecated)}
 \usage{
 mergeCells(
   expr_mt,

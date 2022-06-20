@@ -2,9 +2,13 @@
 
 export(calc_normExpr.Droplet)
 export(calc_normExpr.TPM)
+export(determineK_runNMF)
 export(identifyKnee)
 export(preprocessing)
 export(quantile_normalize)
 export(select_features)
 export(select_features_sc)
+import(dplyr)
+import(ggplot2)
+import(patchwork)
 importFrom(dplyr,`%>%`)

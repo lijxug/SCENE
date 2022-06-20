@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{determineK_runNMF}
 \alias{determineK_runNMF}
-\title{Determine K to use}
+\title{Run NMF for determination of K}
 \usage{
 determineK_runNMF(
   merge_mt,
@@ -27,6 +27,9 @@ determineK_runNMF(
 
 \item{verbose}{Logical. If print the logs.}
 }
+\value{
+A named list with data to determine K
+}
 \description{
-Determine K to use
+A wrapper function to run NMF multiple times and calculate the index matrix helping determination of K
 }
