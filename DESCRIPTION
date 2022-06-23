@@ -2,15 +2,15 @@ Package: AlittleTool
 Title: A tool to identify cell types correlation utilizing bulk data
 Version: 0.1
 Authors@R:
-    person(given = "Jason",
+    c(person(given = "Jason",
            family = "Li",
            role = c("aut", "cre"),
            email = "lijxug@gmail.com",
            comment = c(ORCID = "0000-0002-8720-1344")),
     person(given = "Jiawei",
            family = "Lian",
-           role = c("aut"),
-           email = "1049861267@qq.com")
+           role = c("aut", "ctb"),
+           email = "1049861267@qq.com"))
 Description:
   A tool that utilize bulk/visium information to identify 'co-occurance' relationship among celltypes.
 License: GPL (>= 3)
@@ -19,13 +19,14 @@ LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.2.0
 Imports:
-  Matrix, annotables, 
+  Matrix, annotables, rlang, stringr,
   parallel, pbmcapply, pbapply,
   dplyr, ggplot2, patchwork, kneer,
-  tictoc, entropy, Seurat, ggrastr
+  tictoc, entropy, Seurat, ggrastr,
+  clusterProfiler, annotables
 Remotes:
   mukundvarma/kneer,
   jlianxm/parallelDist,
   zdebruine/RcppML
-Suggests:
-  clusterProfiler
+# Suggests:
+  
