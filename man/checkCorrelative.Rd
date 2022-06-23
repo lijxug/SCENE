@@ -4,7 +4,7 @@
 \alias{checkCorrelative}
 \title{Check and plot the correlation between two programs}
 \usage{
-checkCorrelative(x_label, y_label, test_obj, plt_obj)
+checkCorrelative(x_label, y_label, test_obj, plt_obj, ...)
 }
 \arguments{
 \item{x_label}{Name of a program, x}
@@ -12,6 +12,8 @@ checkCorrelative(x_label, y_label, test_obj, plt_obj)
 \item{y_label}{Name of a program, y}
 
 \item{test_obj}{A test object}
+
+\item{...}{Options pass to Seurat::FeaturePlot}
 }
 \value{
 Ggplot objects

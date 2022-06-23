@@ -4,10 +4,12 @@
 \alias{quantile_normalize}
 \title{Quantile normalization}
 \usage{
-quantile_normalize(mt, verbose = T)
+quantile_normalize(mt, n_cores = 30, verbose = T)
 }
 \arguments{
 \item{mt}{Matrix to norm by columns}
+
+\item{n_cores}{Number of cores to use. (to be added)}
 
 \item{verbose}{Logical,  print the log.}
 }
