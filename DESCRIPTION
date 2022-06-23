@@ -6,7 +6,11 @@ Authors@R:
            family = "Li",
            role = c("aut", "cre"),
            email = "lijxug@gmail.com",
-           comment = c(ORCID = "0000-0002-8720-1344"))
+           comment = c(ORCID = "0000-0002-8720-1344")),
+    person(given = "Jiawei",
+           family = "Lian",
+           role = c("aut"),
+           email = "1049861267@qq.com")
 Description:
   A tool that utilize bulk/visium information to identify 'co-occurance' relationship among celltypes.
 License: GPL (>= 3)
@@ -17,8 +21,11 @@ RoxygenNote: 7.2.0
 Imports:
   Matrix, annotables, 
   parallel, pbmcapply, pbapply,
-  dplyr, ggplot2, patchwork, kneer, RcppML, 
-  tictoc, entropy, Seurat
+  dplyr, ggplot2, patchwork, kneer,
+  tictoc, entropy, Seurat, ggrastr
 Remotes:
   mukundvarma/kneer,
-  jlianxm/parallelDist
+  jlianxm/parallelDist,
+  zdebruine/RcppML
+Suggests:
+  clusterProfiler
