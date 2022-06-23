@@ -82,10 +82,11 @@ calc_jacind_from_cor = function(x_cor_mt, y_cor_mt){
 #' Perform quantile normalization column-wisely on a matrix.
 #' @param mt Matrix to norm by columns
 #' @param verbose Logical,  print the log.
+#' @param n_cores Number of cores to use. (to be added)
 #' @return A quantile-normalized matrix.
 #' @export
 #'
-quantile_normalize = function(mt, verbose = T){
+quantile_normalize = function(mt, n_cores = 30, verbose = T){
   # can adapt the qnorm Rcpp from preprocessCore::normalize.quantiles,
   # however, noted that this function yield a slightly different results 
   # that in some columns the minimum values would differ from others.
@@ -111,7 +112,7 @@ quantile_normalize = function(mt, verbose = T){
     n_nonzero = diff(mt@p)
     n_genes = nrow(mt)
     x_lst = split(mt@x, f = rep.int(1:ncol(mt), n_nonzero))
-    rank_lst = mclapply(x_lst, mc.cores = 30, FUN = function(x_j){
+    rank_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_j_rank = rank(c(x_j, rep(0, n_genes - length(x_j))), ties.method = 'min')
       return(head(x_j_rank, length(x_j)))
     })
@@ -120,11 +121,11 @@ quantile_normalize = function(mt, verbose = T){
     # rm(rank_lst)
     
     if(verbose) message('Sorting...')
-    sort_lst = mclapply(x_lst, mc.cores = 30, FUN = function(x_j){
+    sort_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_j_sorted = sort(c(x_j, rep(0, n_genes - length(x_j))))
       return(tail(x_j_sorted, length(x_j)))
     })
-    idx_lst = mclapply(x_lst, mc.cores = 30, FUN = function(x_j){
+    idx_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_i = tail(0:(n_genes-1), length(x_j))
       return(x_i)
     })
@@ -133,11 +134,11 @@ quantile_normalize = function(mt, verbose = T){
     MM_sorted@x = unlist(sort_lst)
     MM_sorted@i = unlist(idx_lst)
     rm(x_lst, sort_lst, idx_lst)
-    MM_mean = rowMeans(MM_sorted)
+    MM_mean = Matrix::rowMeans(MM_sorted)
     
     if(verbose) message('Normalizing...')
     # all.equal(mt_mean, MM_mean)
-    reassign_lst = mclapply(rank_lst, mc.cores = 30, function(x_rank){
+    reassign_lst = mclapply(rank_lst, mc.cores = n_cores, function(x_rank){
       return(MM_mean[x_rank])
     })
     MM_final = mt
@@ -222,7 +223,7 @@ calc_normExpr.TPM = function(x, logarithmetic = T){
 #' @return Named vector of TPM
 #'
 calc_TPM = function(x){
- require(annotables)
+ # require(annotables)
   length_vec = setNames(nm = annotables::grch38$symbol, 
                         abs(annotables::grch38$start - annotables::grch38$end))
   length_vec = length_vec/1000 # per kilobass
@@ -255,7 +256,7 @@ calc_TPM = function(x){
 #' @export
 #' 
 select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n_cores = 0){
-  require(JasonToolBox)
+  # require(JasonToolBox)
   if(n_cores == 0)
     n_cores = parallel::detectCores()
   
@@ -422,9 +423,9 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #' @return A named list
 #' 
 mergeCells = function(expr_mt, celltypes, target_number = 30, K, k_beta = 2, double_check = F, ...){
-  require(RcppParallel)
-  require(proxyC)
-  require(pbapply)
+  # require(RcppParallel)
+  # require(proxyC)
+  # require(pbapply)
   
   args = list(...)
   n_cores = ifelse(is.null(args$n_cores), RcppParallel::defaultNumThreads(), args$n_cores)
@@ -1225,10 +1226,10 @@ runcNMF = function(merge_mt,
                    col_subset = 1,
                    verbose = T) {
   
-  require(tictoc)
-  require(RcppML)
-  require(ggplot2)
-  require(dplyr)
+  # require(tictoc)
+  # require(RcppML)
+  # require(ggplot2)
+  # require(dplyr)
   
   
   options(RcppML.verbose = F)
@@ -1389,23 +1390,7 @@ identifyConsensusProgram = function(NMFs,
   
   median_knn_dists = unlist(lapply(normh_knn_lst, median))
   
-  knn_success = function(median_knn_dists) {
-    kmeans_obj = kmeans(median_knn_dists, 2)
-    
-    Kmeans_higher_group =
-      names(kmeans_obj$centers[, 1])[kmeans_obj$centers[, 1] == max(kmeans_obj$centers)]
-    
-    return(median(c(
-      max(median_knn_dists[kmeans_obj$cluster != Kmeans_higher_group]), min(median_knn_dists[kmeans_obj$cluster == Kmeans_higher_group])
-    )))
-  }
   
-  knn_fail = function(median_knn_dists) {
-    warning('Cannot find cutoff using K-means.')
-    warning('The range of the distribution of distance is:', min(median_knn_dists), " ", max(median_knn_dists))
-    stopifnot(min(median_knn_dists) != max(median_knn_dists))
-    return(median(median_knn_dists))
-  }
   
   neighbor_dist_cutoff = tryCatch({
     knn_success(median_knn_dists)
@@ -1479,6 +1464,247 @@ identifyConsensusProgram = function(NMFs,
   }
 }
 
+knn_fail = function(median_knn_dists) {
+  warning('Cannot find cutoff using K-means.')
+  warning(
+    'The range of the distribution of distance is:',
+    min(median_knn_dists),
+    " ",
+    max(median_knn_dists)
+  )
+  stopifnot(min(median_knn_dists) != max(median_knn_dists))
+  return(median(median_knn_dists))
+}
+
+knn_success = function(median_knn_dists) {
+  kmeans_obj = kmeans(median_knn_dists, 2)
+  
+  Kmeans_higher_group =
+    names(kmeans_obj$centers[, 1])[kmeans_obj$centers[, 1] == max(kmeans_obj$centers)]
+  
+  return(median(c(
+    max(median_knn_dists[kmeans_obj$cluster != Kmeans_higher_group]), min(median_knn_dists[kmeans_obj$cluster == Kmeans_higher_group])
+  )))
+}
+
+#' Identify consensus programs
+#' 
+#' A wrapper function to merge similar programs into one
+#' @param NMFs List of Results from repetitive NMF runs.
+#' @param merge_data A named list return by `preprocesssing`
+#' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
+#' @param n_reps Integer. Number of replication for each K.
+#' @param reps_ratio Double between \(0, 1\). Keeping clusters that have at least `round(n_reps * reps_ratio)` programs.
+#' @param return_plot Logical. If return the plots for checking.
+#' @param verbose Logical. If print the logs.
+#' @return A named list with consensus programs
+#' @export
+#' 
+identifyConsensusProgram2 = function(NMFs,
+                                     merge_data,
+                                     n_reps,
+                                     n_cores = 0,
+                                     reps_ratio = 0.05,
+                                     return_plot = F,
+                                     verbose = T) {
+  
+  # require(pbapply)
+  # require(tictoc)
+  # require(pbmcapply)
+  # require(parallelDist)
+  # require(igraph)
+  
+  if (n_cores == 0) {
+    message('Using all cores possible: ', parallel::detectCores() - 1)
+    n_cores = parallel::detectCores() - 1
+  } else {
+    message('Using ', n_cores, ' cores.')
+  }
+  
+  involved_samples = unique(Reduce(lapply(NMFs, function(x) {
+    x$subset_cols
+  }), f = union))
+  involved_genes = unique(Reduce(lapply(NMFs, function(x) {
+    x$subset_rows
+  }), f = union))
+  
+  
+  if (verbose) message('Merging H matrices')
+  normh_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
+    x = NMFs[[i_rep]]
+    norm_h_mt = t(x$nmf_obj@h)
+    # norm_term = apply(h_mt, 2, norm, type = '2')
+    # norm_h_mt = sweep(h_mt, 2, norm_term, FUN = '/')
+    
+    miss_samples = setdiff(involved_samples, rownames(norm_h_mt))
+    norm_h_mt_mend = rbind(norm_h_mt, matrix(
+      NA,
+      nrow = length(miss_samples),
+      ncol = ncol(norm_h_mt)
+    ))
+    rownames(norm_h_mt_mend) = c(rownames(norm_h_mt), miss_samples)
+    norm_h_mt_mend = norm_h_mt_mend[involved_samples,]
+    colnames(norm_h_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_h_mt))
+    return(t(norm_h_mt_mend))
+  })
+  normh_all_mt = do.call(rbind, normh_lst)
+  
+  if (verbose) message('Merging W matrices')
+  normw_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
+    x = NMFs[[i_rep]]
+    norm_w_mt = x$nmf_obj@w
+    # norm_term = apply(w_mt, 2, norm, type = '2')
+    # norm_w_mt = sweep(w_mt, 2, norm_term, FUN = '/')
+    
+    miss_genes = setdiff(involved_genes, rownames(norm_w_mt))
+    norm_w_mt_mend = rbind(norm_w_mt, matrix(
+      NA,
+      nrow = length(miss_genes),
+      ncol = ncol(norm_w_mt)
+    ))
+    rownames(norm_w_mt_mend) = c(rownames(norm_w_mt), miss_genes)
+    norm_w_mt_mend = norm_w_mt_mend[involved_genes,]
+    colnames(norm_w_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_w_mt))
+    return(t(norm_w_mt_mend))
+  })
+  normw_all_mt = do.call(rbind, normw_lst)
+  
+  # Calculate distance with 10% NA
+  if (verbose)
+    message('Calculating distance, this could take a while...')
+  if (verbose)
+    tic()
+  # norm_dist_obj = stats::dist(normh_all_mt)
+  # norm_dist_mt = as.matrix(norm_dist_obj)
+  norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
+  if (verbose)
+    toc()
+  
+  # norm_dist_mtmt = as.matrix(norm_dist_mt)
+  
+  if (return_plot) {
+    p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% enframe() %>%
+      ggplot(aes(x = reorder(name, value), y = value)) +
+      geom_point() +
+      geom_vline(xintercept = n_reps) +
+      theme_classic(base_size = 16) +
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()) +
+      labs(x = 'Ordered index', y = 'Euclidean distance')
+  }
+  
+  diag(norm_dist_mt) = Inf
+  
+  if (verbose)
+    message('Calculating KNN')
+  
+  normh_knn_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
+    x = norm_dist_mt[i_row, ]
+    return(sort(x, decreasing = F)[1:n_reps])
+  })
+  names(normh_knn_lst) = rownames(norm_dist_mt)
+  
+  median_knn_dists = unlist(lapply(normh_knn_lst, median))
+  
+  
+  
+  neighbor_dist_cutoff = tryCatch({
+    knn_success(median_knn_dists)
+  }, error = function(e) {
+    knn_fail(median_knn_dists)
+  })
+  
+  if (return_plot) {
+    p2 = median_knn_dists %>% enframe() %>%
+      mutate(cluster = factor(value > neighbor_dist_cutoff)) %>%
+      ggplot(aes(x = value, fill = cluster)) +
+      geom_histogram(bins = 50) +
+      theme_classic(base_size = 18) +
+      geom_vline(xintercept = neighbor_dist_cutoff, linetype = 2) +
+      labs(
+        title = 'Distribution of the median distances',
+        fill = 'Kmeans cluster',
+        x = 'Median distance of NN',
+        y = 'Number of programs'
+      )
+    #
+  }
+  
+  if (verbose)
+    message('Filtering KNN')
+  # Change KNN to adjacency table
+  normh_flt_knn_dist_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
+    x = norm_dist_mt[i_row, ]
+    x[x > neighbor_dist_cutoff] = Inf
+    x[!names(x) %in% names(head(sort(x, decreasing = F), 100))] = Inf
+    return(x)
+  })
+  names(normh_flt_knn_dist_lst) = rownames(norm_dist_mt)
+  normh_flt_knn_dist_mt = do.call(rbind, normh_flt_knn_dist_lst)
+  normh_flt_knn_weights_mt = 1 / normh_flt_knn_dist_mt
+  
+  NotZero_flags = `!=`(rowSums(normh_flt_knn_weights_mt), 0)
+  NotZero_connected_nodes =  names(NotZero_flags)[NotZero_flags]
+  normh_flt_knn_weights_mt = normh_flt_knn_weights_mt[NotZero_connected_nodes, NotZero_connected_nodes]
+  
+  
+  if (verbose) message('Identifying clusters')
+  leiden_obj = leiden::leiden(normh_flt_knn_weights_mt, resolution_parameter = 1)
+  
+  clusters_flags = table(leiden_obj) >= round(n_reps * reps_ratio)
+  chosen_clusts = as.numeric(names(clusters_flags)[clusters_flags])
+  
+  flt_leiden_ind = leiden_obj
+  flt_leiden_ind[!flt_leiden_ind %in% chosen_clusts] = 0
+  flt_leiden_ind_nozero = flt_leiden_ind[flt_leiden_ind != 0]
+  
+  if (verbose) message('Merging programs')
+  
+  consensus_h_mt =
+    pbapply::pbapply(normh_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
+                     2,
+                     function(x) {
+                       tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
+                     })
+  rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
+  
+  consensus_w_mt =
+    pbapply::pbapply(normw_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
+                     2,
+                     function(x) {
+                       tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
+                     })
+  rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
+  
+  # fill NA with 0 because this gene is completely lost in a program cluster
+  consensus_h_mt[is.na(consensus_h_mt)] = 0
+  consensus_h_mt = apply(consensus_h_mt, 1, function(x){x/sum(x)})
+  
+  consensus_w_mt[is.na(consensus_w_mt)] = 0
+  consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
+  
+  # consensus_w_mt = RcppML::predict.nmf(w = t(consensus_h_mt), data = Matrix::t(merge_data$merge_MM))
+  # consensus_diag = rowSums(consensus_w_mt)
+  # consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
+  # consensus_h_mt = t(consensus_h_mt)
+  colnames(consensus_w_mt) = rownames(consensus_h_mt)
+  # names(consensus_diag) = colnames(consensus_w_mt)
+  
+  if(return_plot){
+    return(list(
+      consensus_W = consensus_w_mt, 
+      # consensus_d = consensus_diag, 
+      consensus_H = t(consensus_h_mt), 
+      plots = list(p1, p2)))
+  } else {
+    return(list(
+      consensus_W = consensus_w_mt, 
+      # consensus_d = consensus_diag, 
+      consensus_H = consensus_h_mt
+      ))
+  }
+}
+
 #' Process the consensus programs
 #' 
 #' A wrapper function to process the consensus programs.
@@ -1536,7 +1762,8 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
       reduction = "tsne",
       features = sprintf('MergedProgram_%.2d', i_program),
       order = T,
-      raster = T
+      raster = T, 
+      pt.size = 3 
     )
     # hist_plt_lst2 =
     tmp_plt = seurat_obj@meta.data[, c('name',
@@ -1591,7 +1818,7 @@ calcCorrelative = function(program_mt,
                            rho_cutoff = 0,
                            pval_cutoff = 0.1) {
   
-  require(dplyr)
+  # require(dplyr)
   
   
   bulksID = names(sources)[sources == 'bulk']
@@ -1678,13 +1905,14 @@ calcCorrelative = function(program_mt,
 #' @param x_label Name of a program, x
 #' @param y_label Name of a program, y
 #' @param test_obj A test object
+#' @param ... Options pass to Seurat::FeaturePlot
 #' @return Ggplot objects
 #' @export
 #' 
-checkCorrelative = function(x_label, y_label, test_obj, plt_obj){
-  require(dplyr)
-  require(ggplot2)
-  require(patchwork)
+checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
+  # require(dplyr)
+  # require(ggplot2)
+  # require(patchwork)
   
   x = test_obj$bulk_mt[x_label,]
   y = test_obj$bulk_mt[y_label,]
@@ -1707,16 +1935,14 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj){
     plt_obj$sce_plt,
     reduction = "tsne",
     features = sprintf('%s', x_label),
-    order = T,
-    raster = T
+    ...
   )
   # p1
   p_y = Seurat::FeaturePlot(
     plt_obj$sce_plt,
     reduction = "tsne",
     features = sprintf('%s', y_label),
-    order = T,
-    raster = T
+    ...
   )
   
   p_tsne = DimPlot(
@@ -1732,3 +1958,158 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj){
   invisible(p_all)
 }
 
+
+#' Plot related genes of a given program
+#' 
+#' @param seurat_obj A seurat object that holds the expresssion information and tSNE coordinates.
+#' @param nmf_obj 
+#' @param genes The name(s) of genes to plot 
+#' @param top_n_genes Top n genes to use, if `genes` is not specified, default = 1000.
+#' @param reduction Name of the reduction to use, default tsne.
+#' @param plot_each 
+#' @param programID Name of the program to check, default MergedProgram_01.
+#' @return A named list of ggplot objects
+#' 
+#' @importFrom rlang !! :=
+#' @export
+#' 
+plotProgramGenes = function(seurat_obj,
+                            nmf_obj,
+                            genes = NULL,
+                            top_n_genes = 1000, 
+                            reduction = 'tsne',
+                            plot_each = F, 
+                            programID = 'MergedProgram_01') {
+  
+  if(is.null(genes)){
+    genes = names(tail(sort(nmf_obj$consensus_W[, programID]), n = top_n_genes))
+  }
+  
+  # genes = c('HLA-DRA', 'FTL', 'IFI30', 'LYZ', 'CXCL8')
+  chosen_features = intersect(genes, rownames(seurat_obj@assays$RNA@data))
+  feature_df = seurat_obj@assays$RNA@data[chosen_features, ] %>% apply(1, scale) %>% 
+    as.data.frame() %>% mutate(.before = 1, cellID = colnames(seurat_obj@assays$RNA@data))
+  # plot tSNE
+  plt_df = as.data.frame(seurat_obj@reductions[[reduction]]@cell.embeddings) %>% 
+    mutate(.before = 1, 
+           cellID = rownames(seurat_obj@reductions[[reduction]]@cell.embeddings))
+  
+  plt_df = plt_df %>% left_join(feature_df, by = c('cellID' = 'cellID'))
+  
+  # Plot scaled expression for each gene
+  if(plot_each) {
+    plt_lst = list()
+    for (i_feature in colnames(plt_df)[4:ncol(plt_df)]) {
+      plt_lst[[i_feature]] = plt_df %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = paste0("`", i_feature, "`")
+        )) +
+        geom_point() +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(5, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(5, 'YlGnBu')[3],
+          high = RColorBrewer::brewer.pal(5, 'YlGnBu')[5]
+        )
+    }
+  }
+  # Plot correlation with program value 
+  plt_df = plt_df %>% mutate(!!as.symbol(programID) := nmf_obj$consensus_H[programID, ][cellID])
+  
+  meanScores_vec = Matrix::colMeans(seurat_obj@assays$RNA@data[chosen_features, ])
+  meanScores_vec = (meanScores_vec-mean(meanScores_vec))/sd(meanScores_vec)
+    # apply(t(seurat_obj@assays$RNA@data[chosen_features, ]), 2, function(x) {
+    #   (x - min(x)) / (max(x) - min(x))
+    # }) %>% rowMeans() 
+  
+  plt_df = plt_df %>% mutate(
+    geneMeanScore = meanScores_vec[cellID]
+  )
+  
+  p_umap = plt_df %>% 
+    ggplot(aes_string(x = colnames(plt_df)[2], y = colnames(plt_df)[3], color = 'geneMeanScore')) +
+    geom_point() + 
+    scale_color_gradient2(low = RColorBrewer::brewer.pal(5, 'YlGnBu')[1], 
+                          mid = RColorBrewer::brewer.pal(5, 'YlGnBu')[3], 
+                          high = RColorBrewer::brewer.pal(5, 'YlGnBu')[5])
+  p_umap2 = plt_df %>% 
+    ggplot(aes_string(x = colnames(plt_df)[2], y = colnames(plt_df)[3], color = programID)) +
+    geom_point() + 
+    scale_color_gradient2(low = RColorBrewer::brewer.pal(5, 'YlGnBu')[1], 
+                          mid = RColorBrewer::brewer.pal(5, 'YlGnBu')[3], 
+                          high = RColorBrewer::brewer.pal(5, 'YlGnBu')[5])
+  p_umapall = patchwork::wrap_plots(p_umap, p_umap2)
+  
+  cor_res = cor.test(plt_df[[programID]], plt_df$geneMeanScore, method = 'pearson')
+  p_cor = plt_df %>% 
+    ggplot(aes_string(x = programID, y = "geneMeanScore")) +
+    geom_point() +
+    geom_smooth(method = 'lm') +
+    labs(title = 
+      ifelse(cor_res$p.value == 0,
+             sprintf('Cor = %s\nP.val < 2.20e-16', round(cor_res$estimate, 4)), 
+             sprintf('Cor = %s\nP.val = %s', round(cor_res$estimate, 4), formatC(cor_res$p.value, digits = 2, format = 'e'))))
+  
+  if (plot_each) {
+    return(list(
+      genes = genes, 
+      umaps = plt_lst,
+      geneMeanScore_umap = p_umapall,
+      correlation = p_cor
+    ))
+  } else {
+    return(list(
+      genes = genes, 
+      geneMeanScore_umap = p_umapall,
+      correlation = p_cor
+    ))
+  }
+}
+
+
+#' Plot the enrichment for celltypes DEGs using the related genes of a given program
+#' 
+#' @param nmf_obj 
+#' @param programID Name of the program to check, default MergedProgram_01.
+#' @param TERM2GENE A data.frame pass to `clusterProfiler::GSEA`
+#' @param genes A ranked and named genes vector. Default NULL.
+#' @param top_n_genes Top n genes to use, if `genes` is not specified, default = 1000.
+#' @return A named list of ggplot objects
+#' 
+#' @importFrom clusterProfiler GSEA enricher
+#' @export
+#' 
+geneEnrichCelltypes = function(
+  nmf_obj,
+  programID = 'MergedProgram_01',
+  genes = NULL,
+  top_n_genes = 1000) {
+  
+  all_genes = rownames(nmf_obj$consensus_W)
+  if (is.null(genes)) {
+    genes = sort(nmf_obj$consensus_W[, programID], decreasing = T)
+  }
+  
+  
+  gsea_res = clusterProfiler::GSEA(
+    genes,
+    TERM2GENE = TERM2GENE,
+    scoreType = 'pos',
+    pvalueCutoff = 0.1, 
+    maxGSSize = Inf
+  )
+  
+  enr_res = clusterProfiler::enricher(
+    names(head(genes, 1000)),
+    TERM2GENE = TERM2GENE,
+    pvalueCutoff = 0.1,
+    universe = all_genes,
+    maxGSSize = Inf 
+  )
+  gsea_res %>% as.data.frame() %>% View()
+  
+  
+  
+  return()
+}
