@@ -11,7 +11,9 @@ plotProgramGenes(
   top_n_genes = 1000,
   reduction = "tsne",
   plot_each = F,
-  programID = "MergedProgram_01"
+  normalize_by = NULL,
+  programID = "MergedProgram_01",
+  ...
 )
 }
 \arguments{
@@ -23,11 +25,13 @@ plotProgramGenes(
 
 \item{top_n_genes}{Top n genes to use, if \code{genes} is not specified, default = 1000.}
 
-\item{reduction}{Name of the reduction to use, default tsne.}
+\item{reduction}{String, the name of the reduction to use, default tsne.}
 
-\item{plot_each}{}
+\item{normalize_by}{A named group vector. Default NULL. When specified, the values would be normalize by the maximum number according to group.}
 
 \item{programID}{Name of the program to check, default MergedProgram_01.}
+
+\item{...}{Arguments for geom_point}
 }
 \value{
 A named list of ggplot objects

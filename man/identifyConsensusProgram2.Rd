@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{identifyConsensusProgram2}
 \alias{identifyConsensusProgram2}
-\title{Identify consensus programs}
+\title{Identify consensus programs.ver2}
 \usage{
 identifyConsensusProgram2(
   NMFs,
@@ -17,7 +17,7 @@ identifyConsensusProgram2(
 \arguments{
 \item{NMFs}{List of Results from repetitive NMF runs.}
 
-\item{merge_data}{A named list return by \code{preprocesssing}}
+\item{merge_data}{A named list return by \code{preprocessing}}
 
 \item{n_reps}{Integer. Number of replication for each K.}
 
