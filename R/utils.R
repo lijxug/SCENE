@@ -2287,7 +2287,7 @@ calcCorrelative = function(program_mt,
                            celltypes,
                            nonzero_ratio = 0.1,
                            rho_cutoff = 0,
-                           pval_cutoff = 0.1) {
+                           qval_cutoff = 0.1) {
   
   # require(dplyr)
   
@@ -2377,6 +2377,8 @@ calcCorrelative = function(program_mt,
 #' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
 #' @param celltypes Named vector, should be a cell-id-named vector of cell types
 #' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
+#' @param rho_cutoff The remaining program pairs must have spearman correlation rho larger than this. Default = 0.
+#' @param qval_cutoff The remaining program pairs must have qvalue smaller than this. Default = 0.05. BH method.
 #' @return A named list with the correlative information between celltypes.
 #' @export
 #' 
@@ -2385,7 +2387,7 @@ calcCorrelative2 = function(program_mt,
                             celltypes,
                             nonzero_ratio = 0.1,
                             rho_cutoff = 0,
-                            pval_cutoff = 0.1) {
+                            qval_cutoff = 0.05) {
   
   # require(dplyr)
   
@@ -2432,6 +2434,7 @@ calcCorrelative2 = function(program_mt,
   )
   test_combn_df = do.call(rbind, test_lst)
   rownames(test_combn_df) = NULL
+  test_combn_df$qval = p.adjust(test_combn_df$pval, method = 'BH')
   
   # Mapping correlative programs to cell types
   scsID = names(sources)[sources != 'bulk']
@@ -2443,7 +2446,7 @@ calcCorrelative2 = function(program_mt,
     apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
     t()
   
-  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, pval < pval_cutoff)
+  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, qval < qval_cutoff)
   
   shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
   sctype_prog_mt = sctype_prog_mt[shared_progs, ]
@@ -2466,6 +2469,236 @@ calcCorrelative2 = function(program_mt,
               bulk_mt = bulk_cut_mt, 
               sctype_prog_mt = sctype_prog_mt, 
               correlative_mt = sharedprogs2celltype_mt))
+}
+
+#' Check consensus program values.ver3
+#' 
+#' @param program_mt Matrix, processed
+#' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
+#' @param celltypes Named vector, should be a cell-id-named vector of cell types
+#' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
+#' @param rho_cutoff The remaining program pairs must have spearman correlation rho larger than this. Default = 0.
+#' @param qval_cutoff The remaining program pairs must have qvalue smaller than this. Default = 0.05. BH method.
+#' @param n_permtest Number of permutation rounds to perform, default = 2000
+#' @param n_cores Number of cores to use for permutation, default = the maximum available cores - 1
+#' @return A named list with the correlative information between celltypes.
+#' @export
+#' 
+calcCorrelative3 = function(program_mt,
+                            sources,
+                            celltypes,
+                            nonzero_ratio = 0.1,
+                            rho_cutoff = 0,
+                            n_permtest = 2000, 
+                            n_cores = parallel::detectCores() - 1,
+                            qval_cutoff = 0.05) {
+  
+  # require(dplyr)
+  
+  bulksID = names(sources)[sources == 'bulk']
+  bulk_cut_mt = program_mt[, bulksID]
+  
+  progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
+  progs2run = names(progs2run_idx)[progs2run_idx]
+  
+  bulk_cut_mt = program_mt[progs2run, bulksID]
+  
+  test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
+                             rho = Inf,
+                             pval = Inf)
+  colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
+  
+  message('Identifying correlative programs')
+  
+  test_lst = pbapply::pblapply(
+    1:nrow(test_combn_df),
+    FUN = function(i_row) {
+      x_label = test_combn_df[i_row, 'Prog1', drop = T]
+      y_label = test_combn_df[i_row, 'Prog2', drop = T]
+      x = bulk_cut_mt[x_label, ]
+      y = bulk_cut_mt[y_label, ]
+      # t_idx = x != 0 | y != 0
+      # x = x[t_idx]
+      # y = y[t_idx]
+      tryCatch({
+        suppressWarnings({
+          test_res = cor.test(x, y, method = 'spearman')
+        })
+      }, error = function(e) {
+        warning(e)
+        test_res = list()
+      })
+      tmp_df = data.frame(
+        Prog1 = test_combn_df[i_row, 'Prog1', drop = T],
+        Prog2 = test_combn_df[i_row, 'Prog2', drop = T],
+        rho = test_res$estimate,
+        pval = test_res$p.value
+      )
+    }
+  )
+  test_combn_df = do.call(rbind, test_lst)
+  rownames(test_combn_df) = NULL
+  test_combn_df$qval = p.adjust(test_combn_df$pval, method = 'BH')
+  
+  # Mapping correlative programs to cell types
+  scsID = names(sources)[sources != 'bulk']
+  sc_cut_mt = program_mt[, scsID]
+  
+  sctype_prog_mt = sc_cut_mt %>% 
+    apply(1, function(x){tapply(x, celltypes[scsID], mean)}) %>% 
+    apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
+    apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
+    t()
+  
+  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, qval < qval_cutoff)
+  
+  shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
+  sctype_prog_mt = sctype_prog_mt[shared_progs, ]
+  
+  message('Mapping correlative programs to cell types...')
+  sharedprogs2celltype_lst = pbapply::pblapply(1:nrow(correlative_progs_tbl), function(i_row) {
+    # correlative_progs_tbl[i_row, ]
+    Prog1_vec = sctype_prog_mt[correlative_progs_tbl$Prog1[i_row], ]
+    Prog2_vec = sctype_prog_mt[correlative_progs_tbl$Prog2[i_row], ]
+    
+    tmp_pairmin_mt1 = outer(Prog1_vec, Prog1_vec, '-')
+    # tmp_pairmin_mt1 = abs(tmp_pairmin_mt1)
+    tmp_pairmin_mt1[tmp_pairmin_mt1<0] = 0
+    
+    tmp_pairmin_mt2 = outer(Prog2_vec, Prog2_vec, '-')
+    # tmp_pairmin_mt2 = abs(tmp_pairmin_mt2)
+    tmp_pairmin_mt2[tmp_pairmin_mt2<0] = 0
+      
+    # tmp_outer_mt = tmp_pairmin_mt1 * tmp_pairmin_mt2
+    # tmp_outer_mt = outer(Prog1_vec, Prog2_vec, '*')
+    tmp_outer_mt = tmp_pairmin_mt1 * t(tmp_pairmin_mt2)
+    tmp_outer_mt = (tmp_outer_mt + t(tmp_outer_mt)) * correlative_progs_tbl$rho[i_row]/ sum(correlative_progs_tbl$rho)
+    return(tmp_outer_mt)
+  })
+  sharedprogs2celltype_mt = Reduce('+', sharedprogs2celltype_lst) 
+  # rm(sharedprogs2celltype_lst)
+  invisible(gc())
+  
+  if(n_permtest != 0){
+    message('Begin permutation')
+    perm_lst = pbmcapply::pbmclapply(
+      X = 1:n_permtest,
+      mc.cores = n_cores,
+      FUN = function(i_perm) {
+        tmp_sharedprogs2celltype_lst = lapply(1:nrow(correlative_progs_tbl), function(i_row) {
+          
+          # tmp_celltypes = setNames(
+          #   nm = names(celltypes), 
+          #   sample(celltypes))
+          # 
+          # tmp_sctype_prog_mt = sc_cut_mt %>% 
+          #   apply(1, function(x){tapply(x, tmp_celltypes[scsID], mean)}) %>% 
+          #   apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
+          #   apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
+          #   t()
+          
+          tmp_correlative_progs_tbl = correlative_progs_tbl
+          # tmp_correlative_progs_tbl$Prog1 = sample(tmp_correlative_progs_tbl$Prog1)
+          # tmp_correlative_progs_tbl$Prog2 = sample(tmp_correlative_progs_tbl$Prog2)
+          
+          tmp_sctype_prog_mt = sctype_prog_mt
+          tmp_sctype_prog_mt = tmp_sctype_prog_mt[, sample(colnames(tmp_sctype_prog_mt))]
+          colnames(tmp_sctype_prog_mt) = colnames(sctype_prog_mt)
+          # tmp_sctype_prog_mt = tmp_sctype_prog_mt[sample(rownames(tmp_sctype_prog_mt)), ]
+          # rownames(tmp_sctype_prog_mt) = rownames(sctype_prog_mt)
+          # 
+          Prog1_vec = tmp_sctype_prog_mt[tmp_correlative_progs_tbl$Prog1[i_row], ]
+          Prog2_vec = tmp_sctype_prog_mt[tmp_correlative_progs_tbl$Prog2[i_row], ]
+          # # correlative_progs_tbl[i_row, ]
+          tmp_pairmin_mt1 = outer(Prog1_vec, Prog1_vec, '-')
+          # tmp_pairmin_mt1 = abs(tmp_pairmin_mt1)
+          tmp_pairmin_mt1[tmp_pairmin_mt1<0] = 0
+          
+          tmp_pairmin_mt2 = outer(Prog2_vec, Prog2_vec, '-')
+          # tmp_pairmin_mt2 = abs(tmp_pairmin_mt2)
+          tmp_pairmin_mt2[tmp_pairmin_mt2<0] = 0
+          
+          # tmp_outer_mt = tmp_pairmin_mt1 * tmp_pairmin_mt2
+          # tmp_outer_mt = outer(Prog1_vec, Prog2_vec, '*')
+          tmp_outer_mt = tmp_pairmin_mt1 * t(tmp_pairmin_mt2)
+          tmp_outer_mt = (tmp_outer_mt + t(tmp_outer_mt)) * tmp_correlative_progs_tbl$rho[i_row]/sum(tmp_correlative_progs_tbl$rho)
+          return(tmp_outer_mt)
+        })
+        tmp_sharedprogs2celltype_mt = Reduce('+', tmp_sharedprogs2celltype_lst)
+        rm(tmp_sharedprogs2celltype_lst)
+        invisible(gc())
+        return(tmp_sharedprogs2celltype_mt)
+      }
+    )
+    message('Calculate emperical p values.')
+    perm_mt = do.call(pbapply::pblapply(perm_lst, function(x_mt) {
+      return(x_mt[1:length(x_mt)])
+    }), what = rbind)
+    obs_vec = sharedprogs2celltype_mt[1:length(sharedprogs2celltype_mt)]
+    
+    
+    succ_vec = unlist(pbapply::pblapply(1:length(sharedprogs2celltype_mt), function(i_pair) {
+      return(sum(perm_mt[, i_pair] >= obs_vec[i_pair]) + 1)
+    }))
+    succ_mt = matrix(
+      succ_vec,
+      nrow = nrow(sharedprogs2celltype_mt),
+      dimnames = dimnames(sharedprogs2celltype_mt)
+    )
+    diag(succ_mt) = NA
+    # cluster_pairs = paste(rownames(succ_mt)[row(succ_mt)], colnames(succ_mt)[col(succ_mt)], sep = '---')
+    succ_df = data.frame(
+      row_type = rownames(succ_mt)[row(succ_mt)],
+      col_type = colnames(succ_mt)[col(succ_mt)],
+      succ_count = succ_mt[1:length(succ_mt)],
+      n_trials = n_permtest + 1
+    )
+    succ_df$EmpiricalP = succ_df$succ_count / succ_df$n_trials
+    binomtest_lst = lapply(succ_df$succ_count, function(succ_count){
+      if(is.na(succ_count)){
+        return(list(conf.int = c(NA, NA)))
+      }
+      return(binom.test(x = succ_count, n = n_permtest + 1, p = 0.5))
+    })
+    succ_df$`lb95%CI(p)` = unlist(lapply(binomtest_lst, function(x){x$conf.int[1]}))
+    succ_df$`ub95%CI(p)` = unlist(lapply(binomtest_lst, function(x){x$conf.int[2]}))
+    
+    # pval_vec = unlist(pbapply::pblapply(1:length(sharedprogs2celltype_mt), function(i_pair) {
+    #   return((sum(perm_mt[, i_pair] >= obs_vec[i_pair]) + 1) / (nrow(perm_mt) + 1))
+    # }))
+    # 
+    # pval_mt = matrix(
+    #   pval_vec,
+    #   nrow = nrow(sharedprogs2celltype_mt),
+    #   dimnames = dimnames(sharedprogs2celltype_mt)
+    # )
+    # diag(pval_mt) = NA
+    
+    return(
+      list(
+        test_df = test_combn_df,
+        correlative_progs_tbl = correlative_progs_tbl, 
+        all_bulk_mt = program_mt[, bulksID],
+        bulk_mt = bulk_cut_mt,
+        sctype_prog_mt = sctype_prog_mt,
+        correlative_mt = sharedprogs2celltype_mt,
+        pval_df = succ_df, 
+        # pval_mt = pval_mt,
+        sharedprogs2celltype_lst = sharedprogs2celltype_lst, 
+        perm_lst = perm_lst
+      )
+    )
+  }
+  
+  return(list(test_df = test_combn_df, 
+              correlative_progs_tbl = correlative_progs_tbl, 
+              all_bulk_mt = program_mt[, bulksID],
+              bulk_mt = bulk_cut_mt, 
+              sctype_prog_mt = sctype_prog_mt, 
+              correlative_mt = sharedprogs2celltype_mt, 
+              sharedprogs2celltype_lst = sharedprogs2celltype_lst
+              ))
+  
 }
 
 
@@ -2605,7 +2838,7 @@ plotProgramGenes = function(seurat_obj,
     plt_df[['group']] = normalize_by[plt_df[['cellID']]]
     plt_df = plt_df %>% group_by(group) %>% mutate(norm_score = (geneMeanScore - min(geneMeanScore))/
                                                      (max(geneMeanScore)-min(geneMeanScore)))
-    p_umap = plt_df %>%
+    p_umap = plt_df %>% arrange(norm_score) %>% 
       ggplot(aes_string(
         x = colnames(plt_df)[2],
         y = colnames(plt_df)[3],
@@ -2623,7 +2856,7 @@ plotProgramGenes = function(seurat_obj,
     plt_df = plt_df %>% group_by(group) %>% mutate(norm_program = 
                                                      !!as.symbol(programID) / max(!!as.symbol(programID)))
     tmp_vec = plt_df[['norm_program']]
-    p_umap2 = plt_df %>%
+    p_umap2 = plt_df %>% arrange(norm_program) %>% 
       ggplot(aes_string(
         x = colnames(plt_df)[2],
         y = colnames(plt_df)[3],
@@ -2639,7 +2872,7 @@ plotProgramGenes = function(seurat_obj,
       labs(color = paste0(programID, '(normalized)'))
     
   } else {
-  p_umap = plt_df %>% 
+  p_umap = plt_df %>% arrange(geneMeanScore) %>% 
     ggplot(aes_string(
       x = colnames(plt_df)[2],
       y = colnames(plt_df)[3],
@@ -2654,7 +2887,7 @@ plotProgramGenes = function(seurat_obj,
     )
   
   tmp_vec = plt_df[[programID]]
-  p_umap2 = plt_df %>%
+  p_umap2 = plt_df %>% arrange({{programID}}) %>% 
     ggplot(aes_string(
       x = colnames(plt_df)[2],
       y = colnames(plt_df)[3],
@@ -2671,7 +2904,7 @@ plotProgramGenes = function(seurat_obj,
   
   if(!is.null(normalize_by)){
     cor_res = cor.test(plt_df[[programID]], plt_df$norm_score, method = 'pearson')
-    p_cor = plt_df %>%
+    p_cor = plt_df %>% 
       ggplot(aes_string(x = programID, y = "norm_score")) +
       geom_point(aes(color = group)) +
       geom_smooth(method = 'lm') +
