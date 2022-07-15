@@ -12,6 +12,8 @@ determineK(data_obj, draw_now = F, verbose = T, ...)
 \item{draw_now}{Logical. If print out the plots.}
 
 \item{verbose}{Logical. If print the logs.}
+
+\item{...}{Other parameters for kneer::create_knee_locator}
 }
 \value{
 A named list with optimum K and data/objects to support it.

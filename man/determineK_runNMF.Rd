@@ -11,7 +11,7 @@ determineK_runNMF(
   n_cores = 0,
   draw_now = F,
   verbose = T,
-  ...
+  return_res = F
 )
 }
 \arguments{
@@ -26,6 +26,8 @@ determineK_runNMF(
 \item{draw_now}{Logical. If print out the plots.}
 
 \item{verbose}{Logical. If print the logs.}
+
+\item{return_res}{Logical. If return all results.}
 }
 \value{
 A named list with data to determine K

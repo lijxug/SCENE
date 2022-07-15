@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{identifyConsensusProgram3}
 \alias{identifyConsensusProgram3}
-\title{Identify consensus programs.ver2}
+\title{Identify consensus programs.ver3}
 \usage{
 identifyConsensusProgram3(
   NMFs,

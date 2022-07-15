@@ -1,3 +1,5 @@
+#' @import utils
+#' @import stats
 #' @import ggplot2
 #' @import patchwork
 #' @import dplyr 
@@ -5,29 +7,42 @@
 NULL
 
 # Calculation ----
-calc_CC = function(x, ...){
-  args = list(...)
-  n_cores = ifelse(is.null(args$n_cores), 1, args$n_cores)
-  # w_dist_mt = as.matrix(dist(x))
-  if(n_cores == 1) {
-    w_dist_mt = as.matrix(stats::dist(x))
-  } else {
-    w_dist_mt = as.matrix(parallelDist::parDist(x, threads = n_cores))
-  }
-  # w_dist_mt = as.matrix(w_dist)
-  hc_obj = hclust(w_dist)
-  cc_dist = cophenetic(hc_obj)
-  cc_mt = as.matrix(cc_dist)
-  
-  checkmate::assert(all(rownames(cc_mt) == rownames(w_dist_mt)))
-  checkmate::assert(all(colnames(cc_mt) == colnames(w_dist_mt)))
-  
-  cor_df = data.frame(
-    euc_dist = w_dist_mt[upper.tri(cc_mt, diag = F)], 
-    coph_dist = cc_mt[upper.tri(cc_mt, diag = F)])
-  
-  return(cor(cor_df$euc_dist, cor_df$coph_dist, method = "pearson"))
+#' Generate a random variable with a defined correlation to an existing variables 
+#' This function is adapted from the [post](https://stats.stackexchange.com/questions/15011/generate-a-random-variable-with-a-defined-correlation-to-an-existing-variables)
+#' @param y The reference vector.
+#' @param rho The target correlation
+#' @param x A vector to start with. If specified, it must have the same length as `y`
+#' @export
+#' 
+complementCor = function(y, rho, x) {
+  if (missing(x)) x <- rnorm(length(y)) # Optional: supply a default if `x` is not given
+  y.perp <- residuals(lm(x ~ y))                                                                                                                                                                                                                                              
+  rho * sd(y.perp) * y + y.perp * sd(y) * sqrt(1 - rho^2)
 }
+
+# calc_CC = function(x, ...){
+#   args = list(...)
+#   n_cores = ifelse(is.null(args$n_cores), 1, args$n_cores)
+#   # w_dist_mt = as.matrix(dist(x))
+#   if(n_cores == 1) {
+#     w_dist_mt = as.matrix(stats::dist(x))
+#   } else {
+#     w_dist_mt = as.matrix(parallelDist::parDist(x, threads = n_cores))
+#   }
+#   # w_dist_mt = as.matrix(w_dist)
+#   hc_obj = hclust(w_dist)
+#   cc_dist = cophenetic(hc_obj)
+#   cc_mt = as.matrix(cc_dist)
+#   
+#   checkmate::assert(all(rownames(cc_mt) == rownames(w_dist_mt)))
+#   checkmate::assert(all(colnames(cc_mt) == colnames(w_dist_mt)))
+#   
+#   cor_df = data.frame(
+#     euc_dist = w_dist_mt[upper.tri(cc_mt, diag = F)], 
+#     coph_dist = cc_mt[upper.tri(cc_mt, diag = F)])
+#   
+#   return(cor(cor_df$euc_dist, cor_df$coph_dist, method = "pearson"))
+# }
 
 calc_err = function(origin_mt, nmf_obj){
   if(is.matrix(origin_mt)){
@@ -112,7 +127,7 @@ quantile_normalize = function(mt, n_cores = 30, verbose = T){
     n_nonzero = diff(mt@p)
     n_genes = nrow(mt)
     x_lst = split(mt@x, f = rep.int(1:ncol(mt), n_nonzero))
-    rank_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
+    rank_lst = parallel::mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_j_rank = rank(c(x_j, rep(0, n_genes - length(x_j))), ties.method = 'min')
       return(head(x_j_rank, length(x_j)))
     })
@@ -121,11 +136,11 @@ quantile_normalize = function(mt, n_cores = 30, verbose = T){
     # rm(rank_lst)
     
     if(verbose) message('Sorting...')
-    sort_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
+    sort_lst = parallel::mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_j_sorted = sort(c(x_j, rep(0, n_genes - length(x_j))))
       return(tail(x_j_sorted, length(x_j)))
     })
-    idx_lst = mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
+    idx_lst = parallel::mclapply(x_lst, mc.cores = n_cores, FUN = function(x_j){
       x_i = tail(0:(n_genes-1), length(x_j))
       return(x_i)
     })
@@ -138,7 +153,7 @@ quantile_normalize = function(mt, n_cores = 30, verbose = T){
     
     if(verbose) message('Normalizing...')
     # all.equal(mt_mean, MM_mean)
-    reassign_lst = mclapply(rank_lst, mc.cores = n_cores, function(x_rank){
+    reassign_lst = parallel::mclapply(rank_lst, mc.cores = n_cores, function(x_rank){
       return(MM_mean[x_rank])
     })
     MM_final = mt
@@ -292,7 +307,7 @@ select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n
           mt2_origin = t_batch_X[, t_celltypes != i_celltype, drop = F],
           down_size = 5000, n_cores = n_cores, onlyPos = T)
         if(!is.null(t_de_tbl)){
-          t_type_de_lst[[i_batch]] = t_de_tbl %>% mutate(batchID = i_batch, target_celltype = i_celltype) # %>% filter(adj.P.Val < 0.05)
+          t_type_de_lst[[i_batch]] = t_de_tbl %>% mutate(batchID = i_batch, target_celltype = i_celltype) # %>% dplyr::filter(adj.P.Val < 0.05)
         } 
         invisible(gc())
       }
@@ -366,7 +381,7 @@ dea.wilcox = function (mt1_origin, mt2_origin, down_size = 5000, n_cores = 1, on
   })
   res_tbl = bind_rows(tbl_lst) %>% mutate(adj.P.Val = p.adjust(P.Val, method = 'BH'))
   if(onlyPos){
-    res_tbl = res_tbl %>% filter(Log2FC > 0)
+    res_tbl = res_tbl %>% dplyr::filter(Log2FC > 0)
   }
   return(res_tbl)
 }
@@ -410,367 +425,374 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 
 
 
-#' Merge cells into metacell by clusters (deprecated)
-#' 
-#' Merge single cell data into meta cells. To be deprecated.
-#' @param expr_mt Expression matrix
-#' @param celltypes should be a cell-id-named vector of cell types
-#' @param target_number Number of cells to merge into one, default = 30.
-#' @param k_beta Numeric
-#' @param double_check Logical,
-#' @param n_cores Use when double_check, default using all cores available
-#' @param n_perm Use when double_check, default = 100
-#' @return A named list
-#' 
-mergeCells = function(expr_mt, celltypes, target_number = 30, K, k_beta = 2, double_check = F, ...){
-  # require(RcppParallel)
-  # require(proxyC)
-  # require(pbapply)
-  
-  args = list(...)
-  n_cores = ifelse(is.null(args$n_cores), RcppParallel::defaultNumThreads(), args$n_cores)
-  n_perm = ifelse(is.null(args$n_perm), 100, args$n_perm)
-  batch_num = ifelse(is.null(args$batch_num), 10000, args$batch_num)
-  
-  checkmate::assert(all(colnames(expr_mt) == names(celltypes)))
-  
-  RcppParallel::setThreadOptions(n_cores)
-  
-  message('Merging for metacells')
-  ttl_metacell_lst = list()
-  r = 1
-  redefine_celltypes = c()
-  tic.clear()
-  for (i_celltype in unique(celltypes)) {
-    n_cells = sum(celltypes == i_celltype)
-    target_type_expr_mt = expr_mt[, names(celltypes)[celltypes == i_celltype]]
-    
-    step_seq = unique(c(seq(1, ncol(target_type_expr_mt), by = batch_num), ncol(target_type_expr_mt)+1))
-    
-    tic(msg = i_celltype)
-    for(i_step in 2:length(step_seq)){
-      i_idx1 = step_seq[i_step-1]
-      i_idx2 = step_seq[i_step]-1
-      
-      i_n_cells = i_idx2 - i_idx1 + 1
-      message('Batch processing: ', i_n_cells, ' cells of ', i_celltype)
-      i_target_mt = target_type_expr_mt[, i_idx1:i_idx2]
-      lognorm_mt = log1p(i_target_mt)
-    
-      cor_mat = proxyC::simil(lognorm_mt, method = 'cosine', margin = 2)
-      diag(cor_mat) = 0
-    
-      message('Calculating ranks')
-      rank_mat = pbapply::pbapply(cor_mat, 2, function(x) {
-        y = rank(-x, ties.method = 'max')
-        return(y)
-      })
-      S_mat = rank_mat * t(rank_mat)
-      S_mat = K ^ 2 - S_mat
-      S_mat[S_mat < 0] = 0
-      message('Regularizing ranks for in-node edges')
-      S_mat_i = t(pbapply::pbapply(S_mat, 1, function(x) {
-        y = k_beta * K - rank(-x, ties.method = 'max')
-        y[y < 0] = 0
-        return(y)
-      }))
-      message('Regularizing ranks for out-node edges')
-      adj_mt = pbapply::pbapply(S_mat_i, 2, function(x) {
-        y = K - rank(-x, ties.method = 'max')
-        y[y < 0] = 0
-        return(y)
-      })
-      leiden_obj = leiden::leiden(adj_mt, max_comm_size = target_number)
-      
-      lognorm_meta_mt = log1p(t(apply(i_target_mt, 1, function(x) {
-        tapply(x, INDEX = leiden_obj, mean)
-      })))
-      
-      tmp_expr_meta_mt = expm1(lognorm_meta_mt)
-      colnames(tmp_expr_meta_mt) = sprintf(
-        'metacell_%s_%d_%05.f',
-        stringr::str_replace(i_celltype, ' ', ''),
-        r,
-        as.numeric(colnames(tmp_expr_meta_mt))
-      )
-      
-      ttl_metacell_lst[[r]] = tmp_expr_meta_mt
-      r = r+1
-      redefine_celltypes = c(redefine_celltypes,
-                             setNames(nm = colnames(tmp_expr_meta_mt), rep(i_celltype, ncol(tmp_expr_meta_mt))))
-    }
-    
-    if (double_check) {
-      # Check meta distances
-      obs_DistinMeta = mclapply(split(t(lognorm_mt), leiden_obj), function(x) {
-        y_mt = matrix(x, ncol = nrow(lognorm_mt))
-        return(median(dist(y_mt), na.rm = T))
-      }, mc.cores = n_cores)
-      obs_DistinMeta_vec = unlist(obs_DistinMeta)
-      obs_DistinMeta_vec = obs_DistinMeta_vec[!is.na(obs_DistinMeta_vec)]
-      
-      message('Running permuation now, this step is computational expensive.')
-      # cl = parallel::makeCluster(n_cores)
-      perm_DistinMeta_lst = pbmcapply::pbmclapply(1:n_perm, mc.cores = n_cores, function(i_perm) {
-        sample_leiden_obj = sample(leiden_obj)
-        perm_DistinMeta = lapply(split(t(lognorm_mt), sample_leiden_obj), function(x) {
-          y_mt = matrix(x, ncol = nrow(lognorm_mt))
-          return(median(dist(y_mt), na.rm = T))
-        })
-        perm_DistinMeta_vec = unlist(perm_DistinMeta)
-        perm_DistinMeta_vec = perm_DistinMeta_vec[!is.na(perm_DistinMeta_vec)]
-        return(perm_DistinMeta_vec)
-      })
-      #   stopCluster(cl = cl)
-      plt_DistinMeta_tbl = obs_DistinMeta_vec %>% enframe
-      colnames(plt_DistinMeta_tbl) = c('meta_id', 'median_dist')
-      plt_DistinMeta_tbl = plt_DistinMeta_tbl %>% mutate(source = 'obs')
-      
-      perm_DistinMeta_tbl = lapply(1:length(perm_DistinMeta_lst), function(i_perm) {
-        x = perm_DistinMeta_lst[[i_perm]]
-        tmp_DistinMeta_tbl = enframe(x)
-        colnames(tmp_DistinMeta_tbl) = c('meta_id', 'median_dist')
-        tmp_DistinMeta_tbl = tmp_DistinMeta_tbl %>% mutate(source = sprintf('perm_%d', i_perm))
-        return(tmp_DistinMeta_tbl)
-      }) %>% bind_rows()
-      plt_DistinMeta_tbl = bind_rows(plt_DistinMeta_tbl, perm_DistinMeta_tbl) %>%
-        mutate(category = ifelse(source == 'obs', 'obs', 'perm'))
-      
-      p_distdistr = plt_DistinMeta_tbl %>% ggplot(aes(x = source, y = median_dist, color = category)) +
-        geom_violin() +
-        geom_boxplot(width = 0.5) +
-        labs(x = 'Source', y = 'Median distribution', title = 'Distance distribution between cells within each metacell') +
-        scale_color_manual(values = c('obs' = 'red', 'perm' = 'grey')) +
-        theme(axis.text.x = element_text(
-          angle = 90,
-          hjust = 1,
-          vjust = 0.5
-        ), legend.position = 'none')
-      # p_distdistr
-      # ggsave(
-      #   filename = paste0(getwd(), '/distance_within_metacell_', i_celltype,'_doublecheck.pdf'),
-      #   plot = p_distdistr,
-      #   width = 10,
-      #   height = 5,
-      #   device = 'pdf'
-      # )
-    }
-    
-    toc()
-  }
-  
-  message('Merging matrices...')
-  expr_meta_mt = do.call(what = cbind, args = ttl_metacell_lst)
-  
-  return(list(mt = expr_meta_mt, celltypes = redefine_celltypes))
-}
+# #' Merge cells into metacell by clusters (deprecated)
+# #' 
+# #' Merge single cell data into meta cells. To be deprecated.
+# #' @param expr_mt Expression matrix
+# #' @param celltypes should be a cell-id-named vector of cell types
+# #' @param target_number Number of cells to merge into one, default = 30.
+# #' @param k_beta Numeric
+# #' @param double_check Logical,
+# #' @param n_cores Use when double_check, default using all cores available
+# #' @param n_perm Use when double_check, default = 100
+# #' @return A named list
+# #' 
+# mergeCells = function(expr_mt,
+#                       celltypes,
+#                       target_number = 30,
+#                       K,
+#                       k_beta = 2,
+#                       double_check = F,
+#                       ...) {
+#   
+#   # require(RcppParallel)
+#   # require(proxyC)
+#   # require(pbapply)
+#   
+#   args = list(...)
+#   n_cores = ifelse(is.null(args$n_cores), RcppParallel::defaultNumThreads(), args$n_cores)
+#   n_perm = ifelse(is.null(args$n_perm), 100, args$n_perm)
+#   batch_num = ifelse(is.null(args$batch_num), 10000, args$batch_num)
+#   
+#   checkmate::assert(all(colnames(expr_mt) == names(celltypes)))
+#   
+#   RcppParallel::setThreadOptions(n_cores)
+#   
+#   message('Merging for metacells')
+#   ttl_metacell_lst = list()
+#   r = 1
+#   redefine_celltypes = c()
+#   tic.clear()
+#   for (i_celltype in unique(celltypes)) {
+#     n_cells = sum(celltypes == i_celltype)
+#     target_type_expr_mt = expr_mt[, names(celltypes)[celltypes == i_celltype]]
+#     
+#     step_seq = unique(c(seq(1, ncol(target_type_expr_mt), by = batch_num), ncol(target_type_expr_mt)+1))
+#     
+#     tic(msg = i_celltype)
+#     for(i_step in 2:length(step_seq)){
+#       i_idx1 = step_seq[i_step-1]
+#       i_idx2 = step_seq[i_step]-1
+#       
+#       i_n_cells = i_idx2 - i_idx1 + 1
+#       message('Batch processing: ', i_n_cells, ' cells of ', i_celltype)
+#       i_target_mt = target_type_expr_mt[, i_idx1:i_idx2]
+#       lognorm_mt = log1p(i_target_mt)
+#     
+#       cor_mat = proxyC::simil(lognorm_mt, method = 'cosine', margin = 2)
+#       diag(cor_mat) = 0
+#     
+#       message('Calculating ranks')
+#       rank_mat = pbapply::pbapply(cor_mat, 2, function(x) {
+#         y = rank(-x, ties.method = 'max')
+#         return(y)
+#       })
+#       S_mat = rank_mat * t(rank_mat)
+#       S_mat = K ^ 2 - S_mat
+#       S_mat[S_mat < 0] = 0
+#       message('Regularizing ranks for in-node edges')
+#       S_mat_i = t(pbapply::pbapply(S_mat, 1, function(x) {
+#         y = k_beta * K - rank(-x, ties.method = 'max')
+#         y[y < 0] = 0
+#         return(y)
+#       }))
+#       message('Regularizing ranks for out-node edges')
+#       adj_mt = pbapply::pbapply(S_mat_i, 2, function(x) {
+#         y = K - rank(-x, ties.method = 'max')
+#         y[y < 0] = 0
+#         return(y)
+#       })
+#       leiden_obj = leiden::leiden(adj_mt, max_comm_size = target_number)
+#       
+#       lognorm_meta_mt = log1p(t(apply(i_target_mt, 1, function(x) {
+#         tapply(x, INDEX = leiden_obj, mean)
+#       })))
+#       
+#       tmp_expr_meta_mt = expm1(lognorm_meta_mt)
+#       colnames(tmp_expr_meta_mt) = sprintf(
+#         'metacell_%s_%d_%05.f',
+#         stringr::str_replace(i_celltype, ' ', ''),
+#         r,
+#         as.numeric(colnames(tmp_expr_meta_mt))
+#       )
+#       
+#       ttl_metacell_lst[[r]] = tmp_expr_meta_mt
+#       r = r+1
+#       redefine_celltypes = c(redefine_celltypes,
+#                              setNames(nm = colnames(tmp_expr_meta_mt), rep(i_celltype, ncol(tmp_expr_meta_mt))))
+#     }
+#     
+#     if (double_check) {
+#       # Check meta distances
+#       obs_DistinMeta = parallel::mclapply(split(t(lognorm_mt), leiden_obj), function(x) {
+#         y_mt = matrix(x, ncol = nrow(lognorm_mt))
+#         return(median(dist(y_mt), na.rm = T))
+#       }, mc.cores = n_cores)
+#       obs_DistinMeta_vec = unlist(obs_DistinMeta)
+#       obs_DistinMeta_vec = obs_DistinMeta_vec[!is.na(obs_DistinMeta_vec)]
+#       
+#       message('Running permuation now, this step is computational expensive.')
+#       # cl = parallel::makeCluster(n_cores)
+#       perm_DistinMeta_lst = pbmcapply::pbmclapply(1:n_perm, mc.cores = n_cores, function(i_perm) {
+#         sample_leiden_obj = sample(leiden_obj)
+#         perm_DistinMeta = lapply(split(t(lognorm_mt), sample_leiden_obj), function(x) {
+#           y_mt = matrix(x, ncol = nrow(lognorm_mt))
+#           return(median(dist(y_mt), na.rm = T))
+#         })
+#         perm_DistinMeta_vec = unlist(perm_DistinMeta)
+#         perm_DistinMeta_vec = perm_DistinMeta_vec[!is.na(perm_DistinMeta_vec)]
+#         return(perm_DistinMeta_vec)
+#       })
+#       #   stopCluster(cl = cl)
+#       plt_DistinMeta_tbl = obs_DistinMeta_vec %>% tibble::enframe
+#       colnames(plt_DistinMeta_tbl) = c('meta_id', 'median_dist')
+#       plt_DistinMeta_tbl = plt_DistinMeta_tbl %>% mutate(source = 'obs')
+#       
+#       perm_DistinMeta_tbl = lapply(1:length(perm_DistinMeta_lst), function(i_perm) {
+#         x = perm_DistinMeta_lst[[i_perm]]
+#         tmp_DistinMeta_tbl = enframe(x)
+#         colnames(tmp_DistinMeta_tbl) = c('meta_id', 'median_dist')
+#         tmp_DistinMeta_tbl = tmp_DistinMeta_tbl %>% mutate(source = sprintf('perm_%d', i_perm))
+#         return(tmp_DistinMeta_tbl)
+#       }) %>% bind_rows()
+#       plt_DistinMeta_tbl = bind_rows(plt_DistinMeta_tbl, perm_DistinMeta_tbl) %>%
+#         mutate(category = ifelse(source == 'obs', 'obs', 'perm'))
+#       
+#       p_distdistr = plt_DistinMeta_tbl %>% ggplot(aes(x = source, y = median_dist, color = category)) +
+#         geom_violin() +
+#         geom_boxplot(width = 0.5) +
+#         labs(x = 'Source', y = 'Median distribution', title = 'Distance distribution between cells within each metacell') +
+#         scale_color_manual(values = c('obs' = 'red', 'perm' = 'grey')) +
+#         theme(axis.text.x = element_text(
+#           angle = 90,
+#           hjust = 1,
+#           vjust = 0.5
+#         ), legend.position = 'none')
+#       # p_distdistr
+#       # ggsave(
+#       #   filename = paste0(getwd(), '/distance_within_metacell_', i_celltype,'_doublecheck.pdf'),
+#       #   plot = p_distdistr,
+#       #   width = 10,
+#       #   height = 5,
+#       #   device = 'pdf'
+#       # )
+#     }
+#     
+#     toc()
+#   }
+#   
+#   message('Merging matrices...')
+#   expr_meta_mt = do.call(what = cbind, args = ttl_metacell_lst)
+#   
+#   return(list(mt = expr_meta_mt, celltypes = redefine_celltypes))
+# }
 
 
 
-#' Merge single-cell and bulk data.ver1
-#' 
-#' Merge single cells and bulks/spots into one expression matrix.
-#' 
-#' @param sc_data Sparse matrix of normalized counts or TPM, genes x cells
-#' @param bulk_data Sparse matrix of TPM, genes x samples
-#' @param celltypes Named vector, should be a cell-id-named vector of cell types
-#' @param top_gene_ratio Numeric, top % of HVG genes to remain
-#' @param logarithmetic Logical, whether to log-transformed the data
-#' @param scaling Logical, whether to scale data by Frobenius norm
-#' @param quantile_normalization Logical, whether to perform quantile normalization
-#' @param downsample_size 
-#' @param draw_now Logical, default = T
-#' @param verbose Logical, default TRUE
-#' @return A named list
-#' @export
-#' 
-preprocessing = function(sc_data,
-                         bulk_data,
-                         celltypes, 
-                         top_gene_ratio = 0.5,
-                         logarithmetic = T, 
-                         scaling = T,
-                         quantile_normalization = F,
-                         downsample_size = NULL,
-                         draw_now = T,
-                         verbose = T, ...){
-  
-  stopifnot(all(colnames(sc_data) == names(celltypes)))
-  
-  if(!is.null(downsample_size)){
-    if (verbose) message('Downsampling')
-    celltypes2run = names((table(celltypes) > downsample_size) %>% .[.])
-    chosen_cells = names(celltypes)[!celltypes %in% celltypes2run]
-    for (i_celltype in celltypes2run) {
-      chosen_cells = c(chosen_cells, sample(names(celltypes)[celltypes == i_celltype], downsample_size))
-    }
-    celltypes = celltypes[chosen_cells]
-    sc_data = sc_data[, chosen_cells]
-  }
-  
-  
-  # rm 0 genes 
-  if(verbose) message('Now preprocessing')
-  genes2remain = Matrix::rowSums(sc_data > 1) > 0
-  sc_flt_data = sc_data[genes2remain,]
-  
-  
-  genes2remain = Matrix::rowSums(bulk_data > 1) > 0
-  bulk_norm_flt_mt = bulk_data[genes2remain,]
-  
-  # Extract intersect genes
-  inter_genes = intersect(rownames(sc_flt_data), rownames(bulk_norm_flt_mt))
-  
-  # sc_flt_data = calc_normExpr.TPM(sc_flt_data, logarithmetic = F)
-  # Takes about 1.5 min
-  # sc_flt_data = calc_normExpr.Droplet(sc_flt_data, logarithmetic = F)
-  
-  
-  # Identify HVG 
-  # if(verbose) message('Pass: Identifying HVGs for single cells')
-  # sc_hvg_obj = select_features(sc_flt_data, high_quantile = 1-top_gene_ratio)
-  # plt_obj = sc_hvg_obj
-  # 
-  # p_sc = plt_obj$hvg_df %>%
-  #   ggplot(aes(x = log10(means), y = log10(vars))) +
-  #   geom_point(shape = 'o', aes(color = selected)) +
-  #   geom_line(
-  #     data = data.frame(x = plt_obj$fit$x %>% as.numeric(),
-  #                       y = plt_obj$fit$fitted),
-  #     aes(x = x, y = y),
-  #     color = 'black'
-  #   ) +
-  #   theme_classic(base_size = 18) +
-  #   scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
-  #   labs(title = sprintf(
-  #     "Single cells: CP10K, %d genes selected",
-  #     sum(plt_obj$hvg_df$selected)
-  #   ))
-  
-  if(verbose) message('Identifying HVGs for bulk data')
-  bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1-top_gene_ratio)
-  plt_obj = bulk_hvg_obj
-
-  p_bulk = plt_obj$hvg_df %>%
-    ggplot(aes(x = log10(means), y = log10(vars))) +
-    geom_point(shape = 'o', aes(color = selected)) +
-    geom_line(
-      data = data.frame(x = plt_obj$fit$x %>% as.numeric(), y = plt_obj$fit$fitted),
-      aes(x = x, y = y),
-      color = 'black'
-    ) +
-    theme_classic(base_size = 18) +
-    scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
-    labs(title = sprintf("TCGA: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
-
-  if(draw_now){
-    # print(p_sc)
-    print(p_bulk)
-  }
-  
-  
-  # Filter for HVG for matrices 
-  if(verbose) message('Extracting HVGs')
-  inter_genes = intersect(rownames(bulk_norm_flt_mt), rownames(sc_flt_data))
-  all_variable_genes = union(bulk_hvg_obj$hvg_df$featureID[bulk_hvg_obj$hvg_df$selected],
-                             rownames(sc_flt_data)) %>% unique
-  # all_variable_genes = union(rownames(bulk_norm_flt_mt),
-                             # rownames(sc_flt_data)) %>% unique
-  
-  chosen_genes = unique(intersect(inter_genes, all_variable_genes))
-  if(verbose) message(sprintf("%d genes chosen.", length(chosen_genes)))
-  
-  if(verbose) message(sprintf(
-    "%d / %d TCGA bulk variable genes chosen",
-    sum(rownames(bulk_norm_flt_mt) %in% chosen_genes),
-    length(rownames(bulk_norm_flt_mt))
-  ))
-  
-  if(verbose) message(sprintf(
-    "%d / %d test single cells variable genes chosen",
-    sum(rownames(sc_flt_data) %in% chosen_genes),
-    length(rownames(sc_flt_data))
-  ))
-  
-  # normalize, select genes, scale by MSE
-  sc_norm_data = sc_flt_data[chosen_genes,]
-  
-  # 
-  # if(merge_cell){
-  #   if(verbose) message('Now downsampling')
-  #   sc_norm_data_obj = mergeCells(sc_norm_data, celltypes, target_number = 30, K = ncol(bulk_data), double_check = F)
-  #   sc_norm_data = sc_norm_data_obj$mt
-  #   celltypes = sc_norm_data_obj$celltypes
-  # } 
-  
-  sc_norm_data = as(sc_norm_data, 'dgCMatrix')
-  bulk_tpm_flt_MM = as(bulk_norm_flt_mt[chosen_genes,], 'dgCMatrix')
-
-  # Normalize by library size
-  # scale_factor = colSums(sc_norm_data)
-  # sc_norm_data = sweep_MM(sc_norm_data, 2, scale_factor, function(x, y) {
-  #   x / y
-  # })
-  # 
-  # scale_factor = colSums(bulk_tpm_flt_MM)
-  # bulk_tpm_flt_MM = sweep_MM(bulk_tpm_flt_MM, 2, scale_factor, function(x, y) {
-  #   x / y
-  # })
-  if(logarithmetic){
-    if(verbose) message('Now log-transforming')
-    sc_norm_data@x = log1p(sc_norm_data@x)
-    bulk_tpm_flt_MM@x = log1p(bulk_tpm_flt_MM@x)
-  }
-  
-  # scale by source: Frobenius norm
-  if(scaling){
-    if(verbose) message('Now scaling')
-    scale_factor = sqrt(sum(sc_norm_data@x ^ 2)) # Frobenius norm for sc
-    sc_norm_data@x = sc_norm_data@x / scale_factor
-    
-    scale_factor = sqrt(sum(bulk_tpm_flt_MM@x ^ 2)) # Frobenius norm for bulk
-    bulk_tpm_flt_MM@x = bulk_tpm_flt_MM@x / scale_factor
-  }
-  
-  # bulk_tpm_flt_MM %>% apply(1, function(x){x/sqrt(sum(x^2)/length(x))}) %>% t() %>% as('dgTMatrix')
-  
-  merge_MM = Matrix::cbind2(sc_norm_data,
-                            bulk_tpm_flt_MM)
-  
-  meta.data = data.frame(
-    name = colnames(merge_MM),
-    type = ifelse(
-      colnames(merge_MM) %in% colnames(bulk_norm_flt_mt),
-      "bulk",
-      "singlecell"
-    )
-  ) %>% mutate(
-    celltype = ifelse(is.na(celltypes[name]), "bulk", celltypes[name])# ,
-    # major_celltype = ifelse(is.na(maj_celltype_vec[name]), "bulk", maj_celltype_vec[name])
-  )
-  
-  if(verbose) message(sprintf(
-    "Merged expression matrix is %d genes * %d samples.",
-    nrow(merge_MM),
-    ncol(merge_MM)
-  ))
-  
-  if (quantile_normalization == T) {
-    if(verbose) message('Now quantile normalizing')
-    merge_MM = quantile_normalize(merge_MM)
-  }
-  return(
-    list(
-      merge_MM = merge_MM,
-      meta.data = meta.data,
-      # plot_sc = p_sc,
-      plot_bulk = p_bulk,
-      logarithmetic = logarithmetic,
-      scale = scaling,
-      quantile_normalization = quantile_normalization
-    )
-  )
-}
+# #' Merge single-cell and bulk data.ver1
+# #' 
+# #' Merge single cells and bulks/spots into one expression matrix.
+# #' 
+# #' @param sc_data Sparse matrix of normalized counts or TPM, genes x cells
+# #' @param bulk_data Sparse matrix of TPM, genes x samples
+# #' @param celltypes Named vector, should be a cell-id-named vector of cell types
+# #' @param top_gene_ratio Numeric, top % of HVG genes to remain
+# #' @param logarithmetic Logical, whether to log-transformed the data
+# #' @param scaling Logical, whether to scale data by Frobenius norm
+# #' @param quantile_normalization Logical, whether to perform quantile normalization
+# #' @param downsample_size 
+# #' @param draw_now Logical, default = T
+# #' @param verbose Logical, default TRUE
+# #' @return A named list
+# #' @export
+# #' 
+# preprocessing = function(sc_data,
+#                          bulk_data,
+#                          celltypes, 
+#                          top_gene_ratio = 0.5,
+#                          logarithmetic = T, 
+#                          scaling = T,
+#                          quantile_normalization = F,
+#                          downsample_size = NULL,
+#                          draw_now = T,
+#                          verbose = T, ...){
+#   
+#   stopifnot(all(colnames(sc_data) == names(celltypes)))
+#   
+#   if(!is.null(downsample_size)){
+#     if (verbose) message('Downsampling')
+#     celltypes2run = names((table(celltypes) > downsample_size) %>% .[.])
+#     chosen_cells = names(celltypes)[!celltypes %in% celltypes2run]
+#     for (i_celltype in celltypes2run) {
+#       chosen_cells = c(chosen_cells, sample(names(celltypes)[celltypes == i_celltype], downsample_size))
+#     }
+#     celltypes = celltypes[chosen_cells]
+#     sc_data = sc_data[, chosen_cells]
+#   }
+#   
+#   
+#   # rm 0 genes 
+#   if(verbose) message('Now preprocessing')
+#   genes2remain = Matrix::rowSums(sc_data > 1) > 0
+#   sc_flt_data = sc_data[genes2remain,]
+#   
+#   
+#   genes2remain = Matrix::rowSums(bulk_data > 1) > 0
+#   bulk_norm_flt_mt = bulk_data[genes2remain,]
+#   
+#   # Extract intersect genes
+#   inter_genes = intersect(rownames(sc_flt_data), rownames(bulk_norm_flt_mt))
+#   
+#   # sc_flt_data = calc_normExpr.TPM(sc_flt_data, logarithmetic = F)
+#   # Takes about 1.5 min
+#   # sc_flt_data = calc_normExpr.Droplet(sc_flt_data, logarithmetic = F)
+#   
+#   
+#   # Identify HVG 
+#   # if(verbose) message('Pass: Identifying HVGs for single cells')
+#   # sc_hvg_obj = select_features(sc_flt_data, high_quantile = 1-top_gene_ratio)
+#   # plt_obj = sc_hvg_obj
+#   # 
+#   # p_sc = plt_obj$hvg_df %>%
+#   #   ggplot(aes(x = log10(means), y = log10(vars))) +
+#   #   geom_point(shape = 'o', aes(color = selected)) +
+#   #   geom_line(
+#   #     data = data.frame(x = plt_obj$fit$x %>% as.numeric(),
+#   #                       y = plt_obj$fit$fitted),
+#   #     aes(x = x, y = y),
+#   #     color = 'black'
+#   #   ) +
+#   #   theme_classic(base_size = 18) +
+#   #   scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
+#   #   labs(title = sprintf(
+#   #     "Single cells: CP10K, %d genes selected",
+#   #     sum(plt_obj$hvg_df$selected)
+#   #   ))
+#   
+#   if(verbose) message('Identifying HVGs for bulk data')
+#   bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1-top_gene_ratio)
+#   plt_obj = bulk_hvg_obj
+# 
+#   p_bulk = plt_obj$hvg_df %>%
+#     ggplot(aes(x = log10(means), y = log10(vars))) +
+#     geom_point(shape = 'o', aes(color = selected)) +
+#     geom_line(
+#       data = data.frame(x = plt_obj$fit$x %>% as.numeric(), y = plt_obj$fit$fitted),
+#       aes(x = x, y = y),
+#       color = 'black'
+#     ) +
+#     theme_classic(base_size = 18) +
+#     scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
+#     labs(title = sprintf("TCGA: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
+# 
+#   if(draw_now){
+#     # print(p_sc)
+#     print(p_bulk)
+#   }
+#   
+#   
+#   # Filter for HVG for matrices 
+#   if(verbose) message('Extracting HVGs')
+#   inter_genes = intersect(rownames(bulk_norm_flt_mt), rownames(sc_flt_data))
+#   all_variable_genes = union(bulk_hvg_obj$hvg_df$featureID[bulk_hvg_obj$hvg_df$selected],
+#                              rownames(sc_flt_data)) %>% unique
+#   # all_variable_genes = union(rownames(bulk_norm_flt_mt),
+#                              # rownames(sc_flt_data)) %>% unique
+#   
+#   chosen_genes = unique(intersect(inter_genes, all_variable_genes))
+#   if(verbose) message(sprintf("%d genes chosen.", length(chosen_genes)))
+#   
+#   if(verbose) message(sprintf(
+#     "%d / %d TCGA bulk variable genes chosen",
+#     sum(rownames(bulk_norm_flt_mt) %in% chosen_genes),
+#     length(rownames(bulk_norm_flt_mt))
+#   ))
+#   
+#   if(verbose) message(sprintf(
+#     "%d / %d test single cells variable genes chosen",
+#     sum(rownames(sc_flt_data) %in% chosen_genes),
+#     length(rownames(sc_flt_data))
+#   ))
+#   
+#   # normalize, select genes, scale by MSE
+#   sc_norm_data = sc_flt_data[chosen_genes,]
+#   
+#   # 
+#   # if(merge_cell){
+#   #   if(verbose) message('Now downsampling')
+#   #   sc_norm_data_obj = mergeCells(sc_norm_data, celltypes, target_number = 30, K = ncol(bulk_data), double_check = F)
+#   #   sc_norm_data = sc_norm_data_obj$mt
+#   #   celltypes = sc_norm_data_obj$celltypes
+#   # } 
+#   
+#   sc_norm_data = as(sc_norm_data, 'dgCMatrix')
+#   bulk_tpm_flt_MM = as(bulk_norm_flt_mt[chosen_genes,], 'dgCMatrix')
+# 
+#   # Normalize by library size
+#   # scale_factor = colSums(sc_norm_data)
+#   # sc_norm_data = sweep_MM(sc_norm_data, 2, scale_factor, function(x, y) {
+#   #   x / y
+#   # })
+#   # 
+#   # scale_factor = colSums(bulk_tpm_flt_MM)
+#   # bulk_tpm_flt_MM = sweep_MM(bulk_tpm_flt_MM, 2, scale_factor, function(x, y) {
+#   #   x / y
+#   # })
+#   if(logarithmetic){
+#     if(verbose) message('Now log-transforming')
+#     sc_norm_data@x = log1p(sc_norm_data@x)
+#     bulk_tpm_flt_MM@x = log1p(bulk_tpm_flt_MM@x)
+#   }
+#   
+#   # scale by source: Frobenius norm
+#   if(scaling){
+#     if(verbose) message('Now scaling')
+#     scale_factor = sqrt(sum(sc_norm_data@x ^ 2)) # Frobenius norm for sc
+#     sc_norm_data@x = sc_norm_data@x / scale_factor
+#     
+#     scale_factor = sqrt(sum(bulk_tpm_flt_MM@x ^ 2)) # Frobenius norm for bulk
+#     bulk_tpm_flt_MM@x = bulk_tpm_flt_MM@x / scale_factor
+#   }
+#   
+#   # bulk_tpm_flt_MM %>% apply(1, function(x){x/sqrt(sum(x^2)/length(x))}) %>% t() %>% as('dgTMatrix')
+#   
+#   merge_MM = Matrix::cbind2(sc_norm_data,
+#                             bulk_tpm_flt_MM)
+#   
+#   meta.data = data.frame(
+#     name = colnames(merge_MM),
+#     type = ifelse(
+#       colnames(merge_MM) %in% colnames(bulk_norm_flt_mt),
+#       "bulk",
+#       "singlecell"
+#     )
+#   ) %>% mutate(
+#     celltype = ifelse(is.na(celltypes[name]), "bulk", celltypes[name])# ,
+#     # major_celltype = ifelse(is.na(maj_celltype_vec[name]), "bulk", maj_celltype_vec[name])
+#   )
+#   
+#   if(verbose) message(sprintf(
+#     "Merged expression matrix is %d genes * %d samples.",
+#     nrow(merge_MM),
+#     ncol(merge_MM)
+#   ))
+#   
+#   if (quantile_normalization == T) {
+#     if(verbose) message('Now quantile normalizing')
+#     merge_MM = quantile_normalize(merge_MM)
+#   }
+#   return(
+#     list(
+#       merge_MM = merge_MM,
+#       meta.data = meta.data,
+#       # plot_sc = p_sc,
+#       plot_bulk = p_bulk,
+#       logarithmetic = logarithmetic,
+#       scale = scaling,
+#       quantile_normalization = quantile_normalization
+#     )
+#   )
+# }
 
 #' Merge single-cell and bulk data.ver2
 #' 
@@ -783,25 +805,24 @@ preprocessing = function(sc_data,
 #' @param logarithmetic Logical, whether to log-transformed the data
 #' @param scaling Logical, whether to scale data by Frobenius norm
 #' @param quantile_normalization Logical, whether to perform quantile normalization
-#' @param downsample_size 
+#' @param downsample_size Number of cells to downsample for each cell type. Default = NULL, no sampling.
 #' @param draw_now Logical, default = T
 #' @param verbose Logical, default TRUE
 #' @return A named list
 #' @export
 #' 
 preprocessing2 = function(sc_data,
-                         bulk_data,
-                         celltypes, 
-                         top_gene_ratio = 0.5,
-                         logarithmetic = T, 
-                         scaling = T,
-                         quantile_normalization = F,
-                         downsample_size = NULL,
-                         draw_now = T,
-                         verbose = T, ...){
+                          bulk_data,
+                          celltypes,
+                          top_gene_ratio = 0.5,
+                          logarithmetic = T,
+                          scaling = T,
+                          quantile_normalization = F,
+                          downsample_size = NULL,
+                          draw_now = T,
+                          verbose = T) {
   
-  args_lst = list(...)
-  args_lst$seed = ifelse(is.null(args_lst$seed), 1111, args_lst$seed)
+  
   
   stopifnot(all(colnames(sc_data) == names(celltypes)))
   
@@ -1174,17 +1195,25 @@ plotKnee = function(plt_df, fit_obj) {
 #' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
 #' @param draw_now Logical. If print out the plots.
 #' @param verbose Logical. If print the logs.
+#' @param return_res Logical. If return all results.
 #' @return A named list with data to determine K
 #' @export
 #' 
-determineK_runNMF = function(merge_mt, Ks2run, n_reps, n_cores = 0, draw_now = F, verbose = T, ...) {
+determineK_runNMF = function(merge_mt,
+                             Ks2run,
+                             n_reps,
+                             n_cores = 0,
+                             draw_now = F,
+                             verbose = T,
+                             return_res = F) {
+  
   # require(tictoc)
   # require(RcppML)
   # require(ggplot2)
   # require(dplyr)
   # require(checkmate)
-  args = list(...)
-  return_res = ifelse(is.null(args$return_res), F, T)
+  # args = list(...)
+  # return_res = ifelse(is.null(args$return_res), F, T)
   
   # checkmate::assert_logical(verbose)
   # checkmate::assert_int(n_cores)
@@ -1257,7 +1286,7 @@ determineK_runNMF = function(merge_mt, Ks2run, n_reps, n_cores = 0, draw_now = F
     # no need to store res_lst
     if (verbose)
       message("Calculating entropy...")
-    tmp_df = bind_rows(mclapply(
+    tmp_df = bind_rows(parallel::mclapply(
       mc.cores = n_cores,
       X = 1:length(fnmf_model_lst),
       FUN = function(ith) {
@@ -1300,7 +1329,7 @@ determineK_runNMF = function(merge_mt, Ks2run, n_reps, n_cores = 0, draw_now = F
     
     for (grp_idx in unique(combn_df$index)) {
       t_combn_df = combn_df[combn_df$index == grp_idx,]
-      tmp_jacs_lst = mclapply(
+      tmp_jacs_lst = parallel::mclapply(
         mc.cores = n_cores,
         1:nrow(t_combn_df),
         FUN = function(i_row) {
@@ -1341,6 +1370,7 @@ determineK_runNMF = function(merge_mt, Ks2run, n_reps, n_cores = 0, draw_now = F
 #' @param data_obj Data object from `determineK_runNMF`
 #' @param draw_now Logical. If print out the plots.
 #' @param verbose Logical. If print the logs.
+#' @param ... Other parameters for kneer::create_knee_locator
 #' @return A named list with optimum K and data/objects to support it.
 #' @export
 #' 
@@ -1703,223 +1733,223 @@ knn_success = function(median_knn_dists) {
   )))
 }
 
-#' Identify consensus programs.ver2
-#' 
-#' A wrapper function to merge similar programs into one
-#' @param NMFs List of Results from repetitive NMF runs.
-#' @param merge_data A named list return by `preprocessing`
-#' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
-#' @param n_reps Integer. Number of replication for each K.
-#' @param reps_ratio Double between \(0, 1\). Keeping clusters that have at least `round(n_reps * reps_ratio)` programs.
-#' @param return_plot Logical. If return the plots for checking.
-#' @param verbose Logical. If print the logs.
-#' @return A named list with consensus programs
-#' @export
-#' 
-identifyConsensusProgram2 = function(NMFs,
-                                     merge_data,
-                                     n_reps,
-                                     n_cores = 0,
-                                     reps_ratio = 0.05,
-                                     return_plot = F,
-                                     verbose = T) {
-  
-  # require(pbapply)
-  # require(tictoc)
-  # require(pbmcapply)
-  # require(parallelDist)
-  # require(igraph)
-  
-  if (n_cores == 0) {
-    message('Using all cores possible: ', parallel::detectCores() - 1)
-    n_cores = parallel::detectCores() - 1
-  } else {
-    message('Using ', n_cores, ' cores.')
-  }
-  
-  involved_samples = unique(Reduce(lapply(NMFs, function(x) {
-    x$subset_cols
-  }), f = union))
-  involved_genes = unique(Reduce(lapply(NMFs, function(x) {
-    x$subset_rows
-  }), f = union))
-  
-  
-  if (verbose) message('Merging H matrices')
-  normh_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
-    x = NMFs[[i_rep]]
-    norm_h_mt = t(x$nmf_obj@h)
-    # norm_term = apply(h_mt, 2, norm, type = '2')
-    # norm_h_mt = sweep(h_mt, 2, norm_term, FUN = '/')
-    
-    miss_samples = setdiff(involved_samples, rownames(norm_h_mt))
-    norm_h_mt_mend = rbind(norm_h_mt, matrix(
-      NA,
-      nrow = length(miss_samples),
-      ncol = ncol(norm_h_mt)
-    ))
-    rownames(norm_h_mt_mend) = c(rownames(norm_h_mt), miss_samples)
-    norm_h_mt_mend = norm_h_mt_mend[involved_samples,]
-    colnames(norm_h_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_h_mt))
-    return(t(norm_h_mt_mend))
-  })
-  normh_all_mt = do.call(rbind, normh_lst)
-  
-  if (verbose) message('Merging W matrices')
-  normw_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
-    x = NMFs[[i_rep]]
-    norm_w_mt = x$nmf_obj@w
-    # norm_term = apply(w_mt, 2, norm, type = '2')
-    # norm_w_mt = sweep(w_mt, 2, norm_term, FUN = '/')
-    
-    miss_genes = setdiff(involved_genes, rownames(norm_w_mt))
-    norm_w_mt_mend = rbind(norm_w_mt, matrix(
-      NA,
-      nrow = length(miss_genes),
-      ncol = ncol(norm_w_mt)
-    ))
-    rownames(norm_w_mt_mend) = c(rownames(norm_w_mt), miss_genes)
-    norm_w_mt_mend = norm_w_mt_mend[involved_genes,]
-    colnames(norm_w_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_w_mt))
-    return(t(norm_w_mt_mend))
-  })
-  normw_all_mt = do.call(rbind, normw_lst)
-  
-  # Calculate distance with 10% NA
-  if (verbose)
-    message('Calculating distance, this could take a while...')
-  if (verbose)
-    tic()
-  # norm_dist_obj = stats::dist(normh_all_mt)
-  # norm_dist_mt = as.matrix(norm_dist_obj)
-  norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
-  if (verbose)
-    toc()
-  
-  # norm_dist_mtmt = as.matrix(norm_dist_mt)
-  
-  if (return_plot) {
-    p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% enframe() %>%
-      ggplot(aes(x = reorder(name, value), y = value)) +
-      geom_point() +
-      geom_vline(xintercept = n_reps) +
-      theme_classic(base_size = 16) +
-      theme(axis.text.x = element_blank(),
-            axis.ticks.x = element_blank()) +
-      labs(x = 'Ordered index', y = 'Euclidean distance')
-  }
-  
-  diag(norm_dist_mt) = Inf
-  
-  if (verbose)
-    message('Calculating KNN')
-  
-  normh_knn_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
-    x = norm_dist_mt[i_row, ]
-    return(sort(x, decreasing = F)[1:n_reps])
-  })
-  names(normh_knn_lst) = rownames(norm_dist_mt)
-  
-  median_knn_dists = unlist(lapply(normh_knn_lst, median))
-  
-  
-  
-  neighbor_dist_cutoff = tryCatch({
-    knn_success(median_knn_dists)
-  }, error = function(e) {
-    knn_fail(median_knn_dists)
-  })
-  
-  if (return_plot) {
-    p2 = median_knn_dists %>% enframe() %>%
-      mutate(cluster = factor(value > neighbor_dist_cutoff)) %>%
-      ggplot(aes(x = value, fill = cluster)) +
-      geom_histogram(bins = 50) +
-      theme_classic(base_size = 18) +
-      geom_vline(xintercept = neighbor_dist_cutoff, linetype = 2) +
-      labs(
-        title = 'Distribution of the median distances',
-        fill = 'Kmeans cluster',
-        x = 'Median distance of NN',
-        y = 'Number of programs'
-      )
-    #
-  }
-  
-  if (verbose)
-    message('Filtering KNN')
-  # Change KNN to adjacency table
-  normh_flt_knn_dist_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
-    x = norm_dist_mt[i_row, ]
-    x[x > neighbor_dist_cutoff] = Inf
-    x[!names(x) %in% names(head(sort(x, decreasing = F), 100))] = Inf
-    return(x)
-  })
-  names(normh_flt_knn_dist_lst) = rownames(norm_dist_mt)
-  normh_flt_knn_dist_mt = do.call(rbind, normh_flt_knn_dist_lst)
-  normh_flt_knn_weights_mt = 1 / normh_flt_knn_dist_mt
-  
-  NotZero_flags = `!=`(rowSums(normh_flt_knn_weights_mt), 0)
-  NotZero_connected_nodes =  names(NotZero_flags)[NotZero_flags]
-  normh_flt_knn_weights_mt = normh_flt_knn_weights_mt[NotZero_connected_nodes, NotZero_connected_nodes]
-  
-  
-  if (verbose) message('Identifying clusters')
-  leiden_obj = leiden::leiden(normh_flt_knn_weights_mt, resolution_parameter = 1)
-  
-  clusters_flags = table(leiden_obj) >= round(n_reps * reps_ratio)
-  chosen_clusts = as.numeric(names(clusters_flags)[clusters_flags])
-  
-  flt_leiden_ind = leiden_obj
-  flt_leiden_ind[!flt_leiden_ind %in% chosen_clusts] = 0
-  flt_leiden_ind_nozero = flt_leiden_ind[flt_leiden_ind != 0]
-  
-  if (verbose) message('Merging programs')
-  
-  consensus_h_mt =
-    pbapply::pbapply(normh_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
-                     2,
-                     function(x) {
-                       tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
-                     })
-  rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
-  
-  consensus_w_mt =
-    pbapply::pbapply(normw_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
-                     2,
-                     function(x) {
-                       tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
-                     })
-  rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
-  
-  # fill NA with 0 because this gene is completely lost in a program cluster
-  consensus_h_mt[is.na(consensus_h_mt)] = 0
-  consensus_h_mt = apply(consensus_h_mt, 1, function(x){x/sum(x)})
-  
-  consensus_w_mt[is.na(consensus_w_mt)] = 0
-  consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
-  
-  # consensus_w_mt = RcppML::predict.nmf(w = t(consensus_h_mt), data = Matrix::t(merge_data$merge_MM))
-  # consensus_diag = rowSums(consensus_w_mt)
-  # consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
-  # consensus_h_mt = t(consensus_h_mt)
-  colnames(consensus_w_mt) = colnames(consensus_h_mt)
-  # names(consensus_diag) = colnames(consensus_w_mt)
-  
-  if(return_plot){
-    return(list(
-      consensus_W = consensus_w_mt, 
-      # consensus_d = consensus_diag, 
-      consensus_H = t(consensus_h_mt), 
-      plots = list(p1, p2)))
-  } else {
-    return(list(
-      consensus_W = consensus_w_mt, 
-      # consensus_d = consensus_diag, 
-      consensus_H = consensus_h_mt
-    ))
-  }
-}
+# #' Identify consensus programs.ver2
+# #' 
+# #' A wrapper function to merge similar programs into one
+# #' @param NMFs List of Results from repetitive NMF runs.
+# #' @param merge_data A named list return by `preprocessing`
+# #' @param n_cores Integer. Number of cores to use, recommended to use multicore. Default = 0, all cores possible.
+# #' @param n_reps Integer. Number of replication for each K.
+# #' @param reps_ratio Double between \(0, 1\). Keeping clusters that have at least `round(n_reps * reps_ratio)` programs.
+# #' @param return_plot Logical. If return the plots for checking.
+# #' @param verbose Logical. If print the logs.
+# #' @return A named list with consensus programs
+# #' @export
+# #' 
+# identifyConsensusProgram2 = function(NMFs,
+#                                      merge_data,
+#                                      n_reps,
+#                                      n_cores = 0,
+#                                      reps_ratio = 0.05,
+#                                      return_plot = F,
+#                                      verbose = T) {
+#   
+#   # require(pbapply)
+#   # require(tictoc)
+#   # require(pbmcapply)
+#   # require(parallelDist)
+#   # require(igraph)
+#   
+#   if (n_cores == 0) {
+#     message('Using all cores possible: ', parallel::detectCores() - 1)
+#     n_cores = parallel::detectCores() - 1
+#   } else {
+#     message('Using ', n_cores, ' cores.')
+#   }
+#   
+#   involved_samples = unique(Reduce(lapply(NMFs, function(x) {
+#     x$subset_cols
+#   }), f = union))
+#   involved_genes = unique(Reduce(lapply(NMFs, function(x) {
+#     x$subset_rows
+#   }), f = union))
+#   
+#   
+#   if (verbose) message('Merging H matrices')
+#   normh_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
+#     x = NMFs[[i_rep]]
+#     norm_h_mt = t(x$nmf_obj@h)
+#     # norm_term = apply(h_mt, 2, norm, type = '2')
+#     # norm_h_mt = sweep(h_mt, 2, norm_term, FUN = '/')
+#     
+#     miss_samples = setdiff(involved_samples, rownames(norm_h_mt))
+#     norm_h_mt_mend = rbind(norm_h_mt, matrix(
+#       NA,
+#       nrow = length(miss_samples),
+#       ncol = ncol(norm_h_mt)
+#     ))
+#     rownames(norm_h_mt_mend) = c(rownames(norm_h_mt), miss_samples)
+#     norm_h_mt_mend = norm_h_mt_mend[involved_samples,]
+#     colnames(norm_h_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_h_mt))
+#     return(t(norm_h_mt_mend))
+#   })
+#   normh_all_mt = do.call(rbind, normh_lst)
+#   
+#   if (verbose) message('Merging W matrices')
+#   normw_lst = pbmcapply::pbmclapply(mc.cores = n_cores, 1:length(NMFs), function(i_rep) {
+#     x = NMFs[[i_rep]]
+#     norm_w_mt = x$nmf_obj@w
+#     # norm_term = apply(w_mt, 2, norm, type = '2')
+#     # norm_w_mt = sweep(w_mt, 2, norm_term, FUN = '/')
+#     
+#     miss_genes = setdiff(involved_genes, rownames(norm_w_mt))
+#     norm_w_mt_mend = rbind(norm_w_mt, matrix(
+#       NA,
+#       nrow = length(miss_genes),
+#       ncol = ncol(norm_w_mt)
+#     ))
+#     rownames(norm_w_mt_mend) = c(rownames(norm_w_mt), miss_genes)
+#     norm_w_mt_mend = norm_w_mt_mend[involved_genes,]
+#     colnames(norm_w_mt_mend) = paste0("Rep_", i_rep, "_", colnames(norm_w_mt))
+#     return(t(norm_w_mt_mend))
+#   })
+#   normw_all_mt = do.call(rbind, normw_lst)
+#   
+#   # Calculate distance with 10% NA
+#   if (verbose)
+#     message('Calculating distance, this could take a while...')
+#   if (verbose)
+#     tic()
+#   # norm_dist_obj = stats::dist(normh_all_mt)
+#   # norm_dist_mt = as.matrix(norm_dist_obj)
+#   norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
+#   if (verbose)
+#     toc()
+#   
+#   # norm_dist_mtmt = as.matrix(norm_dist_mt)
+#   
+#   if (return_plot) {
+#     p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% enframe() %>%
+#       ggplot(aes(x = reorder(name, value), y = value)) +
+#       geom_point() +
+#       geom_vline(xintercept = n_reps) +
+#       theme_classic(base_size = 16) +
+#       theme(axis.text.x = element_blank(),
+#             axis.ticks.x = element_blank()) +
+#       labs(x = 'Ordered index', y = 'Euclidean distance')
+#   }
+#   
+#   diag(norm_dist_mt) = Inf
+#   
+#   if (verbose)
+#     message('Calculating KNN')
+#   
+#   normh_knn_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
+#     x = norm_dist_mt[i_row, ]
+#     return(sort(x, decreasing = F)[1:n_reps])
+#   })
+#   names(normh_knn_lst) = rownames(norm_dist_mt)
+#   
+#   median_knn_dists = unlist(lapply(normh_knn_lst, median))
+#   
+#   
+#   
+#   neighbor_dist_cutoff = tryCatch({
+#     knn_success(median_knn_dists)
+#   }, error = function(e) {
+#     knn_fail(median_knn_dists)
+#   })
+#   
+#   if (return_plot) {
+#     p2 = median_knn_dists %>% enframe() %>%
+#       mutate(cluster = factor(value > neighbor_dist_cutoff)) %>%
+#       ggplot(aes(x = value, fill = cluster)) +
+#       geom_histogram(bins = 50) +
+#       theme_classic(base_size = 18) +
+#       geom_vline(xintercept = neighbor_dist_cutoff, linetype = 2) +
+#       labs(
+#         title = 'Distribution of the median distances',
+#         fill = 'Kmeans cluster',
+#         x = 'Median distance of NN',
+#         y = 'Number of programs'
+#       )
+#     #
+#   }
+#   
+#   if (verbose)
+#     message('Filtering KNN')
+#   # Change KNN to adjacency table
+#   normh_flt_knn_dist_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
+#     x = norm_dist_mt[i_row, ]
+#     x[x > neighbor_dist_cutoff] = Inf
+#     x[!names(x) %in% names(head(sort(x, decreasing = F), 100))] = Inf
+#     return(x)
+#   })
+#   names(normh_flt_knn_dist_lst) = rownames(norm_dist_mt)
+#   normh_flt_knn_dist_mt = do.call(rbind, normh_flt_knn_dist_lst)
+#   normh_flt_knn_weights_mt = 1 / normh_flt_knn_dist_mt
+#   
+#   NotZero_flags = `!=`(rowSums(normh_flt_knn_weights_mt), 0)
+#   NotZero_connected_nodes =  names(NotZero_flags)[NotZero_flags]
+#   normh_flt_knn_weights_mt = normh_flt_knn_weights_mt[NotZero_connected_nodes, NotZero_connected_nodes]
+#   
+#   
+#   if (verbose) message('Identifying clusters')
+#   leiden_obj = leiden::leiden(normh_flt_knn_weights_mt, resolution_parameter = 1)
+#   
+#   clusters_flags = table(leiden_obj) >= round(n_reps * reps_ratio)
+#   chosen_clusts = as.numeric(names(clusters_flags)[clusters_flags])
+#   
+#   flt_leiden_ind = leiden_obj
+#   flt_leiden_ind[!flt_leiden_ind %in% chosen_clusts] = 0
+#   flt_leiden_ind_nozero = flt_leiden_ind[flt_leiden_ind != 0]
+#   
+#   if (verbose) message('Merging programs')
+#   
+#   consensus_h_mt =
+#     pbapply::pbapply(normh_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
+#                      2,
+#                      function(x) {
+#                        tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
+#                      })
+#   rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
+#   
+#   consensus_w_mt =
+#     pbapply::pbapply(normw_all_mt[rownames(normh_flt_knn_weights_mt)[flt_leiden_ind != 0],],
+#                      2,
+#                      function(x) {
+#                        tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
+#                      })
+#   rownames(consensus_h_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
+#   
+#   # fill NA with 0 because this gene is completely lost in a program cluster
+#   consensus_h_mt[is.na(consensus_h_mt)] = 0
+#   consensus_h_mt = apply(consensus_h_mt, 1, function(x){x/sum(x)})
+#   
+#   consensus_w_mt[is.na(consensus_w_mt)] = 0
+#   consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
+#   
+#   # consensus_w_mt = RcppML::predict.nmf(w = t(consensus_h_mt), data = Matrix::t(merge_data$merge_MM))
+#   # consensus_diag = rowSums(consensus_w_mt)
+#   # consensus_w_mt = apply(consensus_w_mt, 1, function(x){x/sum(x)})
+#   # consensus_h_mt = t(consensus_h_mt)
+#   colnames(consensus_w_mt) = colnames(consensus_h_mt)
+#   # names(consensus_diag) = colnames(consensus_w_mt)
+#   
+#   if(return_plot){
+#     return(list(
+#       consensus_W = consensus_w_mt, 
+#       # consensus_d = consensus_diag, 
+#       consensus_H = t(consensus_h_mt), 
+#       plots = list(p1, p2)))
+#   } else {
+#     return(list(
+#       consensus_W = consensus_w_mt, 
+#       # consensus_d = consensus_diag, 
+#       consensus_H = consensus_h_mt
+#     ))
+#   }
+# }
 
 
 #' Identify consensus programs.ver3
@@ -2273,203 +2303,203 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
 
 # Correlative graph ----
 
-#' Check consensus program values.ver1
-#' 
-#' @param program_mt Matrix, processed
-#' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
-#' @param celltypes Named vector, should be a cell-id-named vector of cell types
-#' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
-#' @return A named list with the correlative information between celltypes.
-#' @export
-#' 
-calcCorrelative = function(program_mt,
-                           sources,
-                           celltypes,
-                           nonzero_ratio = 0.1,
-                           rho_cutoff = 0,
-                           qval_cutoff = 0.1) {
-  
-  # require(dplyr)
-  
-  
-  bulksID = names(sources)[sources == 'bulk']
-  bulk_cut_mt = program_mt[, bulksID]
-  
-  progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
-  progs2run = names(progs2run_idx)[progs2run_idx]
-  
-  bulk_cut_mt = program_mt[progs2run, bulksID]
-  
-  test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
-                             rho = Inf,
-                             pval = Inf)
-  colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
-  
-  message('Identifying correlative programs')
-  test_lst = pbapply::pblapply(
-    1:nrow(test_combn_df),
-    FUN = function(i_row) {
-      x_label = test_combn_df[i_row, 'Prog1', drop = T]
-      y_label = test_combn_df[i_row, 'Prog2', drop = T]
-      x = bulk_cut_mt[x_label, ]
-      y = bulk_cut_mt[y_label, ]
-      # t_idx = x != 0 | y != 0
-      # x = x[t_idx]
-      # y = y[t_idx]
-      tryCatch({
-        suppressWarnings({
-          test_res = cor.test(x, y, method = 'spearman', exact = F)
-        })
-      }, error = function(e) {
-        warning(e)
-        test_res = list()
-      })
-      tmp_df = data.frame(
-        Prog1 = test_combn_df[i_row, 'Prog1', drop = T],
-        Prog2 = test_combn_df[i_row, 'Prog2', drop = T],
-        rho = test_res$estimate,
-        pval = test_res$p.value
-      )
-    }
-  )
-  test_combn_df = do.call(rbind, test_lst)
-  rownames(test_combn_df) = NULL
-  
-  # Mapping correlative programs to cell types
-  scsID = names(sources)[sources != 'bulk']
-  sc_cut_mt = program_mt[, scsID]
-  
-  sctype_prog_mt = sc_cut_mt %>% 
-    apply(1, function(x){tapply(x, celltypes[scsID], mean)}) %>% 
-    apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
-    apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
-    t()
-  
-  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, pval < pval_cutoff)
-  
-  shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
-  sctype_prog_mt = sctype_prog_mt[shared_progs, ]
-  
-  message('Mapping correlative programs to cell types...')
-  sharedprogs2celltype_lst = pbapply::pblapply(1:nrow(correlative_progs_tbl), function(i_row) {
-    # correlative_progs_tbl[i_row, ]
-    Prog1_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog1', drop = T], ]
-    Prog2_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog2', drop = T], ]
-    tmp_outer_mt = outer(Prog1_vec,
-                         Prog2_vec)
-    tmp_outer_mt = tmp_outer_mt + t(tmp_outer_mt)
-    return(tmp_outer_mt)
-  })
-  sharedprogs2celltype_mt = Reduce('+', sharedprogs2celltype_lst)
-
-  
-  return(list(test_df = test_combn_df, 
-              all_bulk_mt = program_mt[, bulksID],
-              bulk_mt = bulk_cut_mt, 
-              sctype_prog_mt = sctype_prog_mt, 
-              correlative_mt = sharedprogs2celltype_mt))
-}
-
-
-#' Check consensus program values.ver2
-#' 
-#' @param program_mt Matrix, processed
-#' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
-#' @param celltypes Named vector, should be a cell-id-named vector of cell types
-#' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
-#' @param rho_cutoff The remaining program pairs must have spearman correlation rho larger than this. Default = 0.
-#' @param qval_cutoff The remaining program pairs must have qvalue smaller than this. Default = 0.05. BH method.
-#' @return A named list with the correlative information between celltypes.
-#' @export
-#' 
-calcCorrelative2 = function(program_mt,
-                            sources,
-                            celltypes,
-                            nonzero_ratio = 0.1,
-                            rho_cutoff = 0,
-                            qval_cutoff = 0.05) {
-  
-  # require(dplyr)
-  
-  bulksID = names(sources)[sources == 'bulk']
-  bulk_cut_mt = program_mt[, bulksID]
-  
-  progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
-  progs2run = names(progs2run_idx)[progs2run_idx]
-  
-  bulk_cut_mt = program_mt[progs2run, bulksID]
-  
-  test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
-                             rho = Inf,
-                             pval = Inf)
-  colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
-  
-  message('Identifying correlative programs')
-  
-  test_lst = pbapply::pblapply(
-    1:nrow(test_combn_df),
-    FUN = function(i_row) {
-      x_label = test_combn_df[i_row, 'Prog1', drop = T]
-      y_label = test_combn_df[i_row, 'Prog2', drop = T]
-      x = bulk_cut_mt[x_label, ]
-      y = bulk_cut_mt[y_label, ]
-      # t_idx = x != 0 | y != 0
-      # x = x[t_idx]
-      # y = y[t_idx]
-      tryCatch({
-        suppressWarnings({
-          test_res = cor.test(x, y, method = 'spearman')
-        })
-      }, error = function(e) {
-        warning(e)
-        test_res = list()
-      })
-      tmp_df = data.frame(
-        Prog1 = test_combn_df[i_row, 'Prog1', drop = T],
-        Prog2 = test_combn_df[i_row, 'Prog2', drop = T],
-        rho = test_res$estimate,
-        pval = test_res$p.value
-      )
-    }
-  )
-  test_combn_df = do.call(rbind, test_lst)
-  rownames(test_combn_df) = NULL
-  test_combn_df$qval = p.adjust(test_combn_df$pval, method = 'BH')
-  
-  # Mapping correlative programs to cell types
-  scsID = names(sources)[sources != 'bulk']
-  sc_cut_mt = program_mt[, scsID]
-  
-  sctype_prog_mt = sc_cut_mt %>% 
-    apply(1, function(x){tapply(x, celltypes[scsID], mean)}) %>% 
-    apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
-    apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
-    t()
-  
-  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, qval < qval_cutoff)
-  
-  shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
-  sctype_prog_mt = sctype_prog_mt[shared_progs, ]
-  
-  message('Mapping correlative programs to cell types...')
-  sharedprogs2celltype_lst = pbapply::pblapply(1:nrow(correlative_progs_tbl), function(i_row) {
-    # correlative_progs_tbl[i_row, ]
-    Prog1_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog1', drop = T], ]
-    Prog2_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog2', drop = T], ]
-    tmp_outer_mt = outer(Prog1_vec,
-                         Prog2_vec)
-    tmp_outer_mt = tmp_outer_mt + t(tmp_outer_mt)
-    return(tmp_outer_mt)
-  })
-  sharedprogs2celltype_mt = Reduce('+', sharedprogs2celltype_lst)
-  
-  
-  return(list(test_df = test_combn_df, 
-              all_bulk_mt = program_mt[, bulksID],
-              bulk_mt = bulk_cut_mt, 
-              sctype_prog_mt = sctype_prog_mt, 
-              correlative_mt = sharedprogs2celltype_mt))
-}
+# #' Check consensus program values.ver1
+# #' 
+# #' @param program_mt Matrix, processed
+# #' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
+# #' @param celltypes Named vector, should be a cell-id-named vector of cell types
+# #' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
+# #' @return A named list with the correlative information between celltypes.
+# #' @export
+# #' 
+# calcCorrelative = function(program_mt,
+#                            sources,
+#                            celltypes,
+#                            nonzero_ratio = 0.1,
+#                            rho_cutoff = 0,
+#                            qval_cutoff = 0.1) {
+#   
+#   # require(dplyr)
+#   
+#   
+#   bulksID = names(sources)[sources == 'bulk']
+#   bulk_cut_mt = program_mt[, bulksID]
+#   
+#   progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
+#   progs2run = names(progs2run_idx)[progs2run_idx]
+#   
+#   bulk_cut_mt = program_mt[progs2run, bulksID]
+#   
+#   test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
+#                              rho = Inf,
+#                              pval = Inf)
+#   colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
+#   
+#   message('Identifying correlative programs')
+#   test_lst = pbapply::pblapply(
+#     1:nrow(test_combn_df),
+#     FUN = function(i_row) {
+#       x_label = test_combn_df[i_row, 'Prog1', drop = T]
+#       y_label = test_combn_df[i_row, 'Prog2', drop = T]
+#       x = bulk_cut_mt[x_label, ]
+#       y = bulk_cut_mt[y_label, ]
+#       # t_idx = x != 0 | y != 0
+#       # x = x[t_idx]
+#       # y = y[t_idx]
+#       tryCatch({
+#         suppressWarnings({
+#           test_res = cor.test(x, y, method = 'spearman', exact = F)
+#         })
+#       }, error = function(e) {
+#         warning(e)
+#         test_res = list()
+#       })
+#       tmp_df = data.frame(
+#         Prog1 = test_combn_df[i_row, 'Prog1', drop = T],
+#         Prog2 = test_combn_df[i_row, 'Prog2', drop = T],
+#         rho = test_res$estimate,
+#         pval = test_res$p.value
+#       )
+#     }
+#   )
+#   test_combn_df = do.call(rbind, test_lst)
+#   rownames(test_combn_df) = NULL
+#   
+#   # Mapping correlative programs to cell types
+#   scsID = names(sources)[sources != 'bulk']
+#   sc_cut_mt = program_mt[, scsID]
+#   
+#   sctype_prog_mt = sc_cut_mt %>% 
+#     apply(1, function(x){tapply(x, celltypes[scsID], mean)}) %>% 
+#     apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
+#     apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
+#     t()
+#   
+#   correlative_progs_tbl = test_combn_df %>% dplyr::filter(rho > rho_cutoff, pval < pval_cutoff)
+#   
+#   shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
+#   sctype_prog_mt = sctype_prog_mt[shared_progs, ]
+#   
+#   message('Mapping correlative programs to cell types...')
+#   sharedprogs2celltype_lst = pbapply::pblapply(1:nrow(correlative_progs_tbl), function(i_row) {
+#     # correlative_progs_tbl[i_row, ]
+#     Prog1_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog1', drop = T], ]
+#     Prog2_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog2', drop = T], ]
+#     tmp_outer_mt = outer(Prog1_vec,
+#                          Prog2_vec)
+#     tmp_outer_mt = tmp_outer_mt + t(tmp_outer_mt)
+#     return(tmp_outer_mt)
+#   })
+#   sharedprogs2celltype_mt = Reduce('+', sharedprogs2celltype_lst)
+# 
+#   
+#   return(list(test_df = test_combn_df, 
+#               all_bulk_mt = program_mt[, bulksID],
+#               bulk_mt = bulk_cut_mt, 
+#               sctype_prog_mt = sctype_prog_mt, 
+#               correlative_mt = sharedprogs2celltype_mt))
+# }
+# 
+# 
+# #' Check consensus program values.ver2
+# #' 
+# #' @param program_mt Matrix, processed
+# #' @param sources Named strings, c\('sample_name' = 'bulk|singlecell'\)
+# #' @param celltypes Named vector, should be a cell-id-named vector of cell types
+# #' @param nonzero_ratio Value between 0-1, c\('sample_name' = 'bulk|singlecell'\)
+# #' @param rho_cutoff The remaining program pairs must have spearman correlation rho larger than this. Default = 0.
+# #' @param qval_cutoff The remaining program pairs must have qvalue smaller than this. Default = 0.05. BH method.
+# #' @return A named list with the correlative information between celltypes.
+# #' @export
+# #' 
+# calcCorrelative2 = function(program_mt,
+#                             sources,
+#                             celltypes,
+#                             nonzero_ratio = 0.1,
+#                             rho_cutoff = 0,
+#                             qval_cutoff = 0.05) {
+#   
+#   # require(dplyr)
+#   
+#   bulksID = names(sources)[sources == 'bulk']
+#   bulk_cut_mt = program_mt[, bulksID]
+#   
+#   progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
+#   progs2run = names(progs2run_idx)[progs2run_idx]
+#   
+#   bulk_cut_mt = program_mt[progs2run, bulksID]
+#   
+#   test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
+#                              rho = Inf,
+#                              pval = Inf)
+#   colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
+#   
+#   message('Identifying correlative programs')
+#   
+#   test_lst = pbapply::pblapply(
+#     1:nrow(test_combn_df),
+#     FUN = function(i_row) {
+#       x_label = test_combn_df[i_row, 'Prog1', drop = T]
+#       y_label = test_combn_df[i_row, 'Prog2', drop = T]
+#       x = bulk_cut_mt[x_label, ]
+#       y = bulk_cut_mt[y_label, ]
+#       # t_idx = x != 0 | y != 0
+#       # x = x[t_idx]
+#       # y = y[t_idx]
+#       tryCatch({
+#         suppressWarnings({
+#           test_res = cor.test(x, y, method = 'spearman')
+#         })
+#       }, error = function(e) {
+#         warning(e)
+#         test_res = list()
+#       })
+#       tmp_df = data.frame(
+#         Prog1 = test_combn_df[i_row, 'Prog1', drop = T],
+#         Prog2 = test_combn_df[i_row, 'Prog2', drop = T],
+#         rho = test_res$estimate,
+#         pval = test_res$p.value
+#       )
+#     }
+#   )
+#   test_combn_df = do.call(rbind, test_lst)
+#   rownames(test_combn_df) = NULL
+#   test_combn_df$qval = p.adjust(test_combn_df$pval, method = 'BH')
+#   
+#   # Mapping correlative programs to cell types
+#   scsID = names(sources)[sources != 'bulk']
+#   sc_cut_mt = program_mt[, scsID]
+#   
+#   sctype_prog_mt = sc_cut_mt %>% 
+#     apply(1, function(x){tapply(x, celltypes[scsID], mean)}) %>% 
+#     apply(1, function(x){x/(sum(x) + 1e-32)}) %>% 
+#     apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
+#     t()
+#   
+#   correlative_progs_tbl = test_combn_df %>% dplyr::filter(rho > rho_cutoff, qval < qval_cutoff)
+#   
+#   shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
+#   sctype_prog_mt = sctype_prog_mt[shared_progs, ]
+#   
+#   message('Mapping correlative programs to cell types...')
+#   sharedprogs2celltype_lst = pbapply::pblapply(1:nrow(correlative_progs_tbl), function(i_row) {
+#     # correlative_progs_tbl[i_row, ]
+#     Prog1_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog1', drop = T], ]
+#     Prog2_vec = sctype_prog_mt[correlative_progs_tbl[i_row, 'Prog2', drop = T], ]
+#     tmp_outer_mt = outer(Prog1_vec,
+#                          Prog2_vec)
+#     tmp_outer_mt = tmp_outer_mt + t(tmp_outer_mt)
+#     return(tmp_outer_mt)
+#   })
+#   sharedprogs2celltype_mt = Reduce('+', sharedprogs2celltype_lst)
+#   
+#   
+#   return(list(test_df = test_combn_df, 
+#               all_bulk_mt = program_mt[, bulksID],
+#               bulk_mt = bulk_cut_mt, 
+#               sctype_prog_mt = sctype_prog_mt, 
+#               correlative_mt = sharedprogs2celltype_mt))
+# }
 
 #' Check consensus program values.ver3
 #' 
@@ -2503,9 +2533,7 @@ calcCorrelative3 = function(program_mt,
   
   bulk_cut_mt = program_mt[progs2run, bulksID]
   
-  test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)),
-                             rho = Inf,
-                             pval = Inf)
+  test_combn_df = data.frame(t(combn(rownames(bulk_cut_mt), 2)), rho = Inf, pval = Inf)
   colnames(test_combn_df)[1:2] = c('Prog1', 'Prog2')
   
   message('Identifying correlative programs')
@@ -2550,7 +2578,7 @@ calcCorrelative3 = function(program_mt,
     apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
     t()
   
-  correlative_progs_tbl = test_combn_df %>% filter(rho > rho_cutoff, qval < qval_cutoff)
+  correlative_progs_tbl = test_combn_df %>% dplyr::filter(rho > rho_cutoff, qval < qval_cutoff)
   
   shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
   sctype_prog_mt = sctype_prog_mt[shared_progs, ]
@@ -2708,8 +2736,9 @@ calcCorrelative3 = function(program_mt,
 #' @param x_label Name of a program, x
 #' @param y_label Name of a program, y
 #' @param test_obj A test object
+#' @param plt_obj An object for ploting generated by `checkConsensusProgram`
 #' @param ... Options pass to Seurat::FeaturePlot
-#' @return Ggplot objects
+#' @return ggplot objects
 #' @export
 #' 
 checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
@@ -2747,7 +2776,7 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
     ...
   )
   
-  p_tsne = DimPlot(
+  p_tsne = Seurat::DimPlot( # Should be replaced in the future
     plt_obj$sce_plt,
     reduction = "tsne",
     group.by = c('celltype'),
@@ -2764,11 +2793,10 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
 #' Plot related genes of a given program
 #' 
 #' @param seurat_obj A seurat object that holds the expresssion information and tSNE coordinates.
-#' @param nmf_obj 
+#' @param nmf_obj cNMF object from `identifyConsensusProgram`
 #' @param genes The name(s) of genes to plot 
 #' @param top_n_genes Top n genes to use, if `genes` is not specified, default = 1000.
 #' @param reduction String, the name of the reduction to use, default tsne.
-# #' @param plot_each Logical, whether to plot every single gene. Should be modified in the future.
 #' @param normalize_by A named group vector. Default NULL. When specified, the values would be normalize by the maximum number according to group.
 #' @param programID Name of the program to check, default MergedProgram_01.
 #' @param ... Arguments for geom_point
@@ -2782,7 +2810,6 @@ plotProgramGenes = function(seurat_obj,
                             genes = NULL,
                             top_n_genes = 1000, 
                             reduction = 'tsne',
-                            plot_each = F, 
                             normalize_by = NULL, 
                             programID = 'MergedProgram_01',
                             ...) {
@@ -2954,7 +2981,7 @@ plotProgramGenes = function(seurat_obj,
 
 #' Plot the enrichment for celltypes DEGs using the related genes of a given program
 #' 
-#' @param nmf_obj 
+#' @param nmf_obj cNMF object from `identifyConsensusProgram`
 #' @param programID Name of the program to check, default MergedProgram_01.
 #' @param TERM2GENE A data.frame pass to `clusterProfiler::GSEA`
 #' @param all_types A string of all the cell types.

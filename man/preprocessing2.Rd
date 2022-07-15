@@ -14,8 +14,7 @@ preprocessing2(
   quantile_normalization = F,
   downsample_size = NULL,
   draw_now = T,
-  verbose = T,
-  ...
+  verbose = T
 )
 }
 \arguments{
@@ -33,7 +32,7 @@ preprocessing2(
 
 \item{quantile_normalization}{Logical, whether to perform quantile normalization}
 
-\item{downsample_size}{}
+\item{downsample_size}{Number of cells to downsample for each cell type. Default = NULL, no sampling.}
 
 \item{draw_now}{Logical, default = T}
 

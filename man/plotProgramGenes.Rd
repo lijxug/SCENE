@@ -10,7 +10,6 @@ plotProgramGenes(
   genes = NULL,
   top_n_genes = 1000,
   reduction = "tsne",
-  plot_each = F,
   normalize_by = NULL,
   programID = "MergedProgram_01",
   ...
@@ -19,7 +18,7 @@ plotProgramGenes(
 \arguments{
 \item{seurat_obj}{A seurat object that holds the expresssion information and tSNE coordinates.}
 
-\item{nmf_obj}{}
+\item{nmf_obj}{cNMF object from \code{identifyConsensusProgram}}
 
 \item{genes}{The name(s) of genes to plot}
 

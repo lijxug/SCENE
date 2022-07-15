@@ -19,7 +19,7 @@ plotEnrichCelltypes(
 )
 }
 \arguments{
-\item{nmf_obj}{}
+\item{nmf_obj}{cNMF object from \code{identifyConsensusProgram}}
 
 \item{programID}{Name of the program to check, default MergedProgram_01.}
 
