@@ -15,6 +15,12 @@ The goal of SCENE is to …
 
 ## Installation
 
+The cairo library is needed. 
+For Ubuntu
+``` r
+apt-get install libcairo2-dev
+```
+
 <!-- You can install the released version of SCENE from [CRAN](https://CRAN.R-project.org) with: -->
 <!-- ``` r -->
 <!-- install.packages("SCENE") -->
