@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# AlittleTool
+# SCENE
 
 <!-- badges: start -->
 
@@ -11,13 +11,13 @@ v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/li
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-The goal of AlittleTool is to …
+The goal of SCENE is to …
 
 ## Installation
 
-<!-- You can install the released version of AlittleTool from [CRAN](https://CRAN.R-project.org) with: -->
+<!-- You can install the released version of SCENE from [CRAN](https://CRAN.R-project.org) with: -->
 <!-- ``` r -->
-<!-- install.packages("AlittleTool") -->
+<!-- install.packages("SCENE") -->
 <!-- ``` -->
 <!-- And the development version from [GitHub](https://github.com/) with: -->
 
@@ -26,7 +26,7 @@ You can install the development version from
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("lijxug/AlittleTool")
+devtools::install_github("lijxug/SCENE")
 ```
 
 ## Example
