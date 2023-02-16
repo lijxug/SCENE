@@ -1,6 +1,6 @@
-Package: AlittleTool
+Package: SCENE 
 Title: A tool to identify cell types correlation utilizing bulk data
-Version: 0.1
+Version: 0.2
 Authors@R:
     c(person(given = "Jason",
            family = "Li",
@@ -24,7 +24,8 @@ Imports:
   patchwork, kneer, tictoc, entropy, optparse,
   clusterProfiler, leiden, RColorBrewer,
   RcppParallel, RcppML, parallelDist,  checkmate, proxyC, 
-  tibble, Seurat, 
+  tibble, Seurat
+Suggests:
   ggrastr
 Remotes:
   mukundvarma/kneer,

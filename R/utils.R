@@ -3057,6 +3057,11 @@ plotProgramGenes = function(seurat_obj,
     genes = names(tail(sort(nmf_obj$consensus_W[, programID]), n = top_n_genes))
   }
   
+  if(!requireNamespace("ggrastr", quietly = TRUE)){
+    warning('ggrastr not installed. Setting `raster` to FALSE')
+    raster = F
+  }
+  
   chosen_features = intersect(genes, rownames(seurat_obj@assays$RNA@data))
   plt_df = as.data.frame(seurat_obj@reductions[[reduction]]@cell.embeddings) %>%
     mutate(.before = 1,
