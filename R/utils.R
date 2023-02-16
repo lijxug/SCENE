@@ -14,6 +14,7 @@ NULL
 #' @param x A vector to start with. If specified, it must have the same length as `y`
 #' @export
 #' 
+#' 
 complementCor = function(y, rho, x) {
   if (missing(x)) x <- rnorm(length(y)) # Optional: supply a default if `x` is not given
   y.perp <- residuals(lm(x ~ y))                                                                                                                                                                                                                                              
@@ -31,7 +32,7 @@ complementCor = function(y, rho, x) {
 #   }
 #   # w_dist_mt = as.matrix(w_dist)
 #   hc_obj = hclust(w_dist)
-#   cc_dist = cophenetic(hc_obj)
+#   cc_dist = cophenetictoc::tic(hc_obj)
 #   cc_mt = as.matrix(cc_dist)
 #   
 #   checkmate::assert(all(rownames(cc_mt) == rownames(w_dist_mt)))
@@ -291,7 +292,7 @@ select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n
     celltypes_de_lst = list()
     for(i_batch in unique(batches)){
       message(sprintf('Now running batch: %s', i_batch))
-      tic()
+      tictoc::tic()
       # t_grp1_ind = celltypes == i_celltype
       # t_grp2_ind = celltypes != i_celltype
       t_celltypes = celltypes[batches == i_batch]
@@ -315,7 +316,7 @@ select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n
       # t_remained_genes_tbl = t_type_de_tbl %>% group_by(id) %>% 
       #   summarise(Log2FC = max(Log2FC), min_signif = min(adj.P.Val), n_signif = length(unique(batchID))) 
       celltypes_de_lst[[i_celltype]] = t_type_de_tbl
-      toc()
+      tictoc::toc()
     }
     celltypes_de_tbl = bind_rows(celltypes_de_lst)
     
@@ -401,7 +402,7 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
   
   hvg_df = data.frame(featureID = rownames(X), means = rowMeans(X))
   if(is.matrix(X)) {
-    hvg_df$vars = rowVars(X)
+    hvg_df$vars = matrixStats::rowVars(X)
     hvg_df$notzeros = hvg_df$vars > 0
   } else {
     message('Calculating vars for the sparse matrix. This may take a while.')
@@ -469,7 +470,7 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #     
 #     step_seq = unique(c(seq(1, ncol(target_type_expr_mt), by = batch_num), ncol(target_type_expr_mt)+1))
 #     
-#     tic(msg = i_celltype)
+#     tictoc::tic(msg = i_celltype)
 #     for(i_step in 2:length(step_seq)){
 #       i_idx1 = step_seq[i_step-1]
 #       i_idx2 = step_seq[i_step]-1
@@ -578,7 +579,7 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #       # )
 #     }
 #     
-#     toc()
+#     tictoc::toc()
 #   }
 #   
 #   message('Merging matrices...')
@@ -877,7 +878,7 @@ preprocessing2 = function(sc_data,
   #   ))
   
   if(verbose) message('Identifying HVGs for bulk data')
-  bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1-top_gene_ratio)
+  bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1 - top_gene_ratio)
   plt_obj = bulk_hvg_obj
   
   p_bulk = plt_obj$hvg_df %>%
@@ -890,7 +891,7 @@ preprocessing2 = function(sc_data,
     ) +
     theme_classic(base_size = 18) +
     scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
-    labs(title = sprintf("TCGA: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
+    labs(title = sprintf("Bulk: TPM, %d genes selected", sum(plt_obj$hvg_df$selected)))
   
   if(draw_now){
     # print(p_sc)
@@ -910,7 +911,7 @@ preprocessing2 = function(sc_data,
   if(verbose) message(sprintf("%d genes chosen.", length(chosen_genes)))
   
   if(verbose) message(sprintf(
-    "%d / %d TCGA bulk variable genes chosen",
+    "%d / %d bulk genes chosen",
     sum(rownames(bulk_norm_flt_mt) %in% chosen_genes),
     length(rownames(bulk_norm_flt_mt))
   ))
@@ -1001,6 +1002,219 @@ preprocessing2 = function(sc_data,
       quantile_normalization = quantile_normalization
     )
   )
+}
+
+
+#' Merge single-cell and bulk data.ver3
+#' 
+#' Merge single cells and bulks/spots into one expression matrix.
+#' 
+#' @param sc_data Sparse matrix of normalized counts or TPM, genes x cells
+#' @param bulk_data Sparse matrix of TPM, genes x samples
+#' @param celltypes Named vector, should be a cell-id-named vector of cell types
+#' @param top_gene_ratio Numeric, top % of HVG genes to remain
+#' @param logarithmetic Logical, whether to log-transformed the data
+#' @param findHVG Logical, whether to find HVG for bulks
+#' @param scaling Logical, whether to scale data by Frobenius norm
+#' @param quantile_normalization Logical, whether to perform quantile normalization
+#' @param downsample_size Number of cells to downsample for each cell type. Default = NULL, no sampling.
+#' @param draw_now Logical, default = T
+#' @param verbose Logical, default TRUE
+#' @return A named list
+#' @export
+#' 
+preprocessing3 = function(sc_data,
+                          bulk_data,
+                          celltypes,
+                          top_gene_ratio = 0.5,
+                          logarithmetic = T,
+                          findHVG = F, 
+                          scaling = T,
+                          quantile_normalization = F,
+                          downsample_size = NULL,
+                          draw_now = T,
+                          verbose = T) {
+  
+  
+  
+  stopifnot(!is.null(colnames(sc_data)))
+  stopifnot(!is.null(colnames(bulk_data)))
+  stopifnot(!(length(sc_data) == 0))
+  stopifnot(!(length(bulk_data) == 0))
+  stopifnot(all(colnames(sc_data) == names(celltypes)))
+  
+  if(!is.null(downsample_size)){
+    if (verbose) message('Downsampling')
+    celltypes2run = names((table(celltypes) > downsample_size) %>% .[.])
+    chosen_cells = names(celltypes)[!celltypes %in% celltypes2run]
+    for (i_celltype in celltypes2run) {
+      chosen_cells = c(chosen_cells, sample(names(celltypes)[celltypes == i_celltype], downsample_size))
+    }
+    celltypes = celltypes[chosen_cells]
+    sc_data = sc_data[, chosen_cells]
+  }
+  
+  
+  # rm 0 genes 
+  if(verbose) message('Now preprocessing')
+  genes2remain = Matrix::rowSums(sc_data > 1) > 0
+  sc_flt_data = sc_data[genes2remain,]
+  
+  
+  genes2remain = Matrix::rowSums(bulk_data > 1) > 0
+  bulk_norm_flt_mt = bulk_data[genes2remain,]
+  
+  # Extract intersect genes
+  inter_genes = intersect(rownames(sc_flt_data), rownames(bulk_norm_flt_mt))
+  
+  # sc_flt_data = calc_normExpr.TPM(sc_flt_data, logarithmetic = F)
+  # Takes about 1.5 min
+  # sc_flt_data = calc_normExpr.Droplet(sc_flt_data, logarithmetic = F)
+  
+  
+  # Identify HVG 
+  if(findHVG) {
+    if (verbose)
+      message('Identifying HVGs for bulk data')
+    bulk_hvg_obj = select_features(bulk_norm_flt_mt, high_quantile = 1 - top_gene_ratio)
+    plt_obj = bulk_hvg_obj
+    
+    p_bulk = plt_obj$hvg_df %>%
+      ggplot(aes(x = log10(means), y = log10(vars))) +
+      geom_point(shape = 'o', aes(color = selected)) +
+      geom_line(
+        data = data.frame(
+          x = plt_obj$fit$x %>% as.numeric(),
+          y = plt_obj$fit$fitted
+        ),
+        aes(x = x, y = y),
+        color = 'black'
+      ) +
+      theme_classic(base_size = 18) +
+      scale_color_manual(values = c("TRUE" = JasonToolBox::gg_color_hue(2)[1], "FALSE" = "grey50")) +
+      labs(title = sprintf("Bulk: TPM, %d genes highlighted", sum(plt_obj$hvg_df$selected)))
+    
+    if (draw_now) {
+      # print(p_sc)
+      print(p_bulk)
+    }
+    if(verbose) message('Extracting HVGs')
+    
+    # Filter for HVG for matrices
+    all_variable_genes = union(bulk_hvg_obj$hvg_df$featureID[bulk_hvg_obj$hvg_df$selected],
+                               rownames(sc_flt_data)) %>% unique
+    
+    chosen_genes = unique(intersect(inter_genes, all_variable_genes))
+    if (verbose)
+      message(sprintf("%d genes chosen.", length(chosen_genes)))
+    
+    if (verbose)
+      message(sprintf(
+        "%d / %d bulk genes chosen",
+        sum(rownames(bulk_norm_flt_mt) %in% chosen_genes),
+        length(rownames(bulk_norm_flt_mt))
+      ))
+    
+    if (verbose)
+      message(sprintf(
+        "%d / %d single cells genes chosen",
+        sum(rownames(sc_flt_data) %in% chosen_genes),
+        length(rownames(sc_flt_data))
+      ))
+    
+    # normalize, select genes, scale by MSE
+    # sc_norm_data = sc_flt_data[chosen_genes, ]
+    # bulk_norm_flt_mt = bulk_norm_flt_mt[chosen_genes,]
+  } else {
+    chosen_genes = unique(inter_genes)
+  }
+  
+  sc_norm_data = sc_flt_data[chosen_genes, ]
+  bulk_norm_flt_mt = bulk_norm_flt_mt[chosen_genes,]
+  
+  sc_norm_data = as(sc_norm_data, 'dgCMatrix')
+  bulk_tpm_flt_MM = as(bulk_norm_flt_mt, 'dgCMatrix')
+  
+  # Normalize by library size
+  # scale_factor = colSums(sc_norm_data)
+  # sc_norm_data = sweep_MM(sc_norm_data, 2, scale_factor, function(x, y) {
+  #   x / y
+  # })
+  # 
+  # scale_factor = colSums(bulk_tpm_flt_MM)
+  # bulk_tpm_flt_MM = sweep_MM(bulk_tpm_flt_MM, 2, scale_factor, function(x, y) {
+  #   x / y
+  # })
+  if(logarithmetic){
+    if(verbose) message('Now log-transforming')
+    sc_norm_data@x = log1p(sc_norm_data@x)
+    bulk_tpm_flt_MM@x = log1p(bulk_tpm_flt_MM@x)
+  }
+  origin_merge_MM = Matrix::cbind2(sc_norm_data, bulk_tpm_flt_MM)
+  
+  # scale by source: Frobenius norm
+  if(scaling){
+    if(verbose) message('Now scaling')
+    scale_factor = sqrt(sum(sc_norm_data@x ^ 2)) # Frobenius norm for sc
+    sc_norm_data@x = sc_norm_data@x / scale_factor
+    
+    scale_factor = sqrt(sum(bulk_tpm_flt_MM@x ^ 2)) # Frobenius norm for bulk
+    bulk_tpm_flt_MM@x = bulk_tpm_flt_MM@x / scale_factor
+  }
+  
+  # bulk_tpm_flt_MM %>% apply(1, function(x){x/sqrt(sum(x^2)/length(x))}) %>% t() %>% as('dgTMatrix')
+  
+  merge_MM = Matrix::cbind2(sc_norm_data,
+                            bulk_tpm_flt_MM)
+  
+  meta.data = data.frame(
+    name = colnames(merge_MM),
+    type = ifelse(
+      colnames(merge_MM) %in% colnames(bulk_norm_flt_mt),
+      "bulk",
+      "singlecell"
+    )
+  ) %>% mutate(
+    celltype = ifelse(is.na(celltypes[name]), "bulk", celltypes[name])# ,
+    # major_celltype = ifelse(is.na(maj_celltype_vec[name]), "bulk", maj_celltype_vec[name])
+  )
+  
+  if(verbose) message(sprintf(
+    "Merged expression matrix is %d genes * %d samples.",
+    nrow(merge_MM),
+    ncol(merge_MM)
+  ))
+  
+  if (quantile_normalization == T) {
+    if(verbose) message('Now quantile normalizing')
+    merge_MM = quantile_normalize(merge_MM)
+  }
+  if(findHVG) {
+    return(
+      list(
+        origin_MM = origin_merge_MM,
+        merge_MM = merge_MM,
+        meta.data = meta.data,
+        # plot_sc = p_sc,
+        plot_bulk = p_bulk,
+        logarithmetic = logarithmetic,
+        scale = scaling,
+        quantile_normalization = quantile_normalization
+      )
+    )
+  } else {
+    return(
+      list(
+        origin_MM = origin_merge_MM,
+        merge_MM = merge_MM,
+        meta.data = meta.data,
+        logarithmetic = logarithmetic,
+        scale = scaling,
+        quantile_normalization = quantile_normalization
+      )
+    )
+    
+  }
 }
 
 
@@ -1249,13 +1463,13 @@ determineK_runNMF = function(merge_mt,
     }
     ##### Run NMF #####
     if (verbose) {
-      tic(msg = "Fast NMF sequentially")
+      tictoc::tic(msg = "Fast NMF sequentially")
       JasonToolBox::initiatePB('.I1')
     }
     
     fnmf_model_lst = list()
     for (i_rep in 1:n_reps) {
-      tic()
+      tictoc::tic()
       i_seed = 1000 * k + i_rep
       
       fnmf_model_lst[[i_rep]] = list(
@@ -1278,7 +1492,7 @@ determineK_runNMF = function(merge_mt,
         JasonToolBox::processBar('.I1', i_rep, n_reps)
     }
     if (verbose)
-      f_time_seq = toc()
+      f_time_seq = tictoc::toc()
     if(return_res) res_lst[[as.character(k)]] = fnmf_model_lst
     invisible(gc())
     
@@ -1295,6 +1509,7 @@ determineK_runNMF = function(merge_mt,
         test_x = fnmf_model@h
         test_x[1:length(test_x)] = cut(fnmf_model@h, 50)
         w_entr_vec = apply(test_x, 2, function(x) {
+          # y = entropy::entropy(table(x), unit = 'log2') / (-log2(1 / length(table(x)))) # normalized entropy
           y = entropy::entropy(x, unit = 'log2') / (-log2(1 / length(x))) # normalized entropy
           return(y)
         })
@@ -1416,7 +1631,7 @@ determineK = function(data_obj, draw_now = F, verbose = T, ...) {
       )
     )
   
-  entropy_df = data_obj$data_df$entropy_df
+  entropy_df = data_obj$data_df$entropy_df %>% dplyr::filter(!is.na(median_entropy))
   knee_point_entropy = identifyKnee(
     x = entropy_df$k,
     y = entropy_df$median_entropy,
@@ -1497,11 +1712,11 @@ runcNMF = function(merge_mt,
   message("Now running k = ", k)
   message("Using ", n_cores, " cores.")
   
-  tic(msg = "Fast NMF sequentially")
+  tictoc::tic(msg = "Fast NMF sequentially")
   fnmf_model_lst = list()
   JasonToolBox::initiatePB('.I1')
   for (i_rep in 1:n_reps) {
-    tic()
+    tictoc::tic()
     i_seed = 1000 * k + i_rep
     
     test_mt = merge_mt[sample(1:nrow(merge_mt),
@@ -1527,7 +1742,7 @@ runcNMF = function(merge_mt,
     
     JasonToolBox::processBar('.I1', i_rep, n_reps)
   }
-  f_time_seq = toc()
+  f_time_seq = tictoc::toc()
   
   
   
@@ -1604,12 +1819,12 @@ runcNMF = function(merge_mt,
 #   if (verbose)
 #     message('Calculating distance, this could take a while...')
 #   if (verbose)
-#     tic()
+#     tictoc::tic()
 #   # norm_dist_obj = stats::dist(normh_all_mt)
 #   # norm_dist_mt = as.matrix(norm_dist_obj)
 #   norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
 #   if (verbose)
-#     toc()
+#     tictoc::toc()
 #   
 #   # norm_dist_mtmt = as.matrix(norm_dist_mt)
 #   
@@ -1819,12 +2034,12 @@ knn_success = function(median_knn_dists) {
 #   if (verbose)
 #     message('Calculating distance, this could take a while...')
 #   if (verbose)
-#     tic()
+#     tictoc::tic()
 #   # norm_dist_obj = stats::dist(normh_all_mt)
 #   # norm_dist_mt = as.matrix(norm_dist_obj)
 #   norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
 #   if (verbose)
-#     toc()
+#     tictoc::toc()
 #   
 #   # norm_dist_mtmt = as.matrix(norm_dist_mt)
 #   
@@ -2047,12 +2262,12 @@ identifyConsensusProgram3 = function(NMFs,
   if (verbose)
     message('Calculating distance, this could take a while...')
   if (verbose)
-    tic()
+    tictoc::tic()
   # norm_dist_obj = stats::dist(normh_all_mt)
   # norm_dist_mt = as.matrix(norm_dist_obj)
   norm_dist_mt = as.matrix(parallelDist::parDist(normh_all_mt, threads = n_cores))
   if (verbose)
-    toc()
+    tictoc::toc()
   
   # norm_dist_mtmt = as.matrix(norm_dist_mt)
   
@@ -2070,7 +2285,7 @@ identifyConsensusProgram3 = function(NMFs,
   diag(norm_dist_mt) = Inf
   
   if (verbose)
-    message('Calculating KNN')
+    message('Calculating AKNN')
   
   normh_knn_lst = pbmcapply::pbmclapply(rownames(norm_dist_mt), mc.cores = n_cores, function(i_row) {
     x = norm_dist_mt[i_row, ]
@@ -2140,7 +2355,7 @@ identifyConsensusProgram3 = function(NMFs,
                      function(x) {
                        tapply(x, INDEX = flt_leiden_ind_nozero, median, na.rm = T)
                      })
-  rownames(consensus_H_mt) = sprintf("MergedProgram_%.2d", 1:length(unique(flt_leiden_ind_nozero)))
+  rownames(consensus_H_mt) = sprintf("cProgram %.2d", 1:length(unique(flt_leiden_ind_nozero)))
   consensus_H_mt[is.na(consensus_H_mt)] = 0
   consensus_d_vec = rowSums(consensus_H_mt)
   # consensus_h_mt2 = apply(consensus_h_mt, 1, function(x){x/sum(x)})
@@ -2194,11 +2409,13 @@ processConsensusProgram2 = function(merged_program_mt,
   consensus_H_mt = apply(merged_program_mt, 1, function(x) { x / sum(x) }) # normalize by each program
   
   sources = sources[rownames(consensus_H_mt)]
+  i_cat = unique(sources)[1]
   cut_mt_normbySample = apply(consensus_H_mt, 2, function(x) {
     y = x
     y[y < (max(y) * program_cutoff)] = 0 # For each program, samples with prog activity less than 10% of the maximum activity are set to 0
-    y[sources == 'bulk'] = (y[sources == 'bulk']) / (max(y[sources == 'bulk']) + 1e-32)
-    y[sources != 'bulk'] = (y[sources != 'bulk']) / (max(y[sources != 'bulk']) + 1e-32)
+    y[is.na(y)] = 0
+    y[sources == i_cat] = (y[sources == i_cat]) / (max(y[sources == i_cat]) + .Machine$double.xmin)
+    y[sources != i_cat] = (y[sources != i_cat]) / (max(y[sources != i_cat]) + .Machine$double.xmin)
     return(y)
   }) 
   cut_mt_normbySample = t(cut_mt_normbySample)
@@ -2251,7 +2468,7 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
   # require(Seurat) # Seurat dependencies should be removed in the future.
   
   plt_tbl = as.data.frame(t(program_mt), stringAsfactor = F) %>% 
-    mutate(.before = "MergedProgram_01", cellID = colnames(program_mt))
+    mutate(.before = "cProgram 01", cellID = colnames(program_mt))
   
   seurat_obj@meta.data = left_join(seurat_obj@meta.data, plt_tbl, by = c("name" = "cellID"))
   rownames(seurat_obj@meta.data) = seurat_obj@meta.data$name
@@ -2261,7 +2478,7 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
     p1 = Seurat::FeaturePlot(
       seurat_obj,
       reduction = "tsne",
-      features = sprintf('MergedProgram_%.2d', i_program),
+      features = sprintf('cProgram %.2d', i_program),
       order = T,
       raster = T, 
       pt.size = 3 
@@ -2271,7 +2488,7 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
                                        'type',
                                        'celltype',
                                        'source',
-                                       sprintf('MergedProgram_%.2d', i_program))]
+                                       sprintf('cProgram %.2d', i_program))]
     colnames(tmp_plt) = c('name', 'type', 'celltype', 'source', 'ProgramValue')
     p2 =
       tmp_plt %>% ggplot(aes(
@@ -2294,7 +2511,7 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
         axis.title.x = element_blank(),
         axis.ticks.x = element_blank()
       ) +
-      labs(title = sprintf('MergedProgram_%.2d', i_program))
+      labs(title = sprintf('cProgram %.2d', i_program))
     return(list(p1 = p1, p2 = p2))
   })
   
@@ -2568,6 +2785,8 @@ calcCorrelative3 = function(program_mt,
   rownames(test_combn_df) = NULL
   test_combn_df$qval = p.adjust(test_combn_df$pval, method = 'BH')
   
+  correlative_progs_tbl = test_combn_df %>% dplyr::filter(rho > rho_cutoff, qval < qval_cutoff)
+  
   # Mapping correlative programs to cell types
   scsID = names(sources)[sources != 'bulk']
   sc_cut_mt = program_mt[, scsID]
@@ -2578,7 +2797,23 @@ calcCorrelative3 = function(program_mt,
     apply(1, function(x){x/(max(x) + 1e-32)}) %>% 
     t()
   
-  correlative_progs_tbl = test_combn_df %>% dplyr::filter(rho > rho_cutoff, qval < qval_cutoff)
+  
+  if(!nrow(correlative_progs_tbl)){
+    warning('No programs are significantly correlated!')
+    return(
+      list(
+        test_df = test_combn_df,
+        correlative_progs_tbl = correlative_progs_tbl, 
+        all_bulk_mt = program_mt[, bulksID],
+        bulk_mt = bulk_cut_mt,
+        sctype_prog_mt = sctype_prog_mt,
+        correlative_mt = NA,
+        pval_df = NA, 
+        sharedprogs2celltype_lst = NA, 
+        perm_lst = NA 
+      )
+    )
+  }
   
   shared_progs = with(correlative_progs_tbl, unique(c(Prog1, Prog2)))
   sctype_prog_mt = sctype_prog_mt[shared_progs, ]
@@ -2731,6 +2966,7 @@ calcCorrelative3 = function(program_mt,
 
 
 
+
 #' Check and plot the correlation between two programs
 #' 
 #' @param x_label Name of a program, x
@@ -2754,7 +2990,7 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
   p_value = test_res$p.value
   p1 = data.frame(x, y) %>% ggplot(aes(x = x, y = y)) +
     geom_point() +
-    geom_smooth(method = 'glm') + 
+    geom_smooth(method = 'glm', formula = y ~ x) + 
     theme_classic(base_size = 20) +
     labs(
       x = x_label,
@@ -2781,13 +3017,16 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
     reduction = "tsne",
     group.by = c('celltype'),
     cols = color_celltype,
-    label = T
+    label = T, 
+    ...
   )
   
   p_all = p1 + p_tsne + p_x + p_y + patchwork::plot_layout(ncol = 2, nrow = 2) 
   print(p_all)
   invisible(p_all)
 }
+
+
 
 
 #' Plot related genes of a given program
@@ -2798,7 +3037,7 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
 #' @param top_n_genes Top n genes to use, if `genes` is not specified, default = 1000.
 #' @param reduction String, the name of the reduction to use, default tsne.
 #' @param normalize_by A named group vector. Default NULL. When specified, the values would be normalize by the maximum number according to group.
-#' @param programID Name of the program to check, default MergedProgram_01.
+#' @param programID Name of the program to check, default cProgram 01.
 #' @param ... Arguments for geom_point
 #' @return A named list of ggplot objects
 #' 
@@ -2808,181 +3047,381 @@ checkCorrelative = function(x_label, y_label, test_obj, plt_obj, ...){
 plotProgramGenes = function(seurat_obj,
                             nmf_obj,
                             genes = NULL,
-                            top_n_genes = 1000, 
+                            top_n_genes = 1000,
                             reduction = 'tsne',
-                            normalize_by = NULL, 
-                            programID = 'MergedProgram_01',
+                            normalize_by = NULL,
+                            programID = 'cProgram 01',
+                            raster = T,
                             ...) {
-  
-  if(is.null(genes)){
+  if (is.null(genes)) {
     genes = names(tail(sort(nmf_obj$consensus_W[, programID]), n = top_n_genes))
   }
   
-  # genes = c('HLA-DRA', 'FTL', 'IFI30', 'LYZ', 'CXCL8')
   chosen_features = intersect(genes, rownames(seurat_obj@assays$RNA@data))
-  # feature_df = seurat_obj@assays$RNA@data[chosen_features, ] %>% apply(1, scale) %>% 
-  # as.data.frame() %>% mutate(.before = 1, cellID = colnames(seurat_obj@assays$RNA@data))
-  # plot tSNE
-  plt_df = as.data.frame(seurat_obj@reductions[[reduction]]@cell.embeddings) %>% 
-    mutate(.before = 1, 
+  plt_df = as.data.frame(seurat_obj@reductions[[reduction]]@cell.embeddings) %>%
+    mutate(.before = 1,
            cellID = rownames(seurat_obj@reductions[[reduction]]@cell.embeddings))
   
-  # plt_df = plt_df %>% left_join(feature_df, by = c('cellID' = 'cellID'))
+  # Plot correlation with program value
+  plt_df = plt_df %>% mutate(!!as.symbol(programID) := nmf_obj$consensus_H[programID,][cellID])
   
-  # Plot scaled expression for each gene
-  # if(plot_each) {
-  #   plt_lst = list()
-  #   for (i_feature in colnames(plt_df)[4:ncol(plt_df)]) {
-  #     plt_lst[[i_feature]] = plt_df %>%
-  #       ggplot(aes_string(
-  #         x = colnames(plt_df)[2],
-  #         y = colnames(plt_df)[3],
-  #         color = paste0("`", i_feature, "`")
-  #       )) +
-  #       geom_point() +
-  #       scale_color_gradient2(
-  #         low = RColorBrewer::brewer.pal(5, 'YlGnBu')[1],
-  #         mid = RColorBrewer::brewer.pal(5, 'YlGnBu')[3],
-  #         high = RColorBrewer::brewer.pal(5, 'YlGnBu')[5]
-  #       )
-  #   }
-  # }
-  # Plot correlation with program value 
-  plt_df = plt_df %>% mutate(!!as.symbol(programID) := nmf_obj$consensus_H[programID, ][cellID])
-  
-  # meanScores_vec = Matrix::colMeans(seurat_obj@assays$RNA@data[chosen_features, ])
-  # meanScores_vec = (meanScores_vec-mean(meanScores_vec))/sd(meanScores_vec)
-  meanScores_vec = 
-    apply(Matrix::t(seurat_obj@assays$RNA@counts[chosen_features, ]), 2, function(x) {
+  meanScores_vec =
+    apply(Matrix::t(seurat_obj@assays$RNA@data[chosen_features,]), 2, function(x) {
       (x - min(x)) / (max(x) - min(x))
     }) %>% rowMeans()
   
-  plt_df = plt_df %>% mutate(
-    geneMeanScore = meanScores_vec[cellID]
-  )
+  plt_df = plt_df %>% mutate(geneMeanScore = meanScores_vec[cellID])
   
-  if(!is.null(normalize_by)){
+  if (!is.null(normalize_by)) {
     plt_df[['group']] = normalize_by[plt_df[['cellID']]]
-    plt_df = plt_df %>% group_by(group) %>% mutate(norm_score = (geneMeanScore - min(geneMeanScore))/
-                                                     (max(geneMeanScore)-min(geneMeanScore)))
-    p_umap = plt_df %>% arrange(norm_score) %>% 
-      ggplot(aes_string(
-        x = colnames(plt_df)[2],
-        y = colnames(plt_df)[3],
-        color = 'norm_score'
-      )) +
-      geom_point(...) +
-      scale_color_gradient2(
-        low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
-        mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
-        midpoint = with(plt_df, (max(norm_score) - min(norm_score)) / 2 + min(norm_score)),
-        high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
-      ) +
-      labs(color = 'Mean score(normalized)')
+    plt_df = plt_df %>%
+      group_by(group) %>%
+      mutate(norm_score = (geneMeanScore - min(geneMeanScore)) / (max(geneMeanScore) -
+                                                                    min(geneMeanScore)))
     
-    plt_df = plt_df %>% group_by(group) %>% mutate(norm_program = 
-                                                     !!as.symbol(programID) / max(!!as.symbol(programID)))
+    if (raster) {
+      p_umap = plt_df %>% arrange(norm_score) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'norm_score'
+        )) +
+        ggrastr::rasterise(geom_point(...), dpi = 300) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = with(plt_df, (max(norm_score) - min(norm_score)) / 2 + min(norm_score)),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Mean expression\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    } else {
+      p_umap = plt_df %>% arrange(norm_score) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'norm_score'
+        )) +
+        geom_point(...) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = with(plt_df, (max(norm_score) - min(norm_score)) / 2 + min(norm_score)),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Mean expression\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    }
+    
+    plt_df = plt_df %>% group_by(group) %>% mutate(norm_program = !!as.symbol(programID) / max(!!as.symbol(programID)))
     tmp_vec = plt_df[['norm_program']]
-    p_umap2 = plt_df %>% arrange(norm_program) %>% 
-      ggplot(aes_string(
-        x = colnames(plt_df)[2],
-        y = colnames(plt_df)[3],
-        color = 'norm_program'
-      )) +
-      geom_point(...) +
-      scale_color_gradient2(
-        low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
-        mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
-        midpoint = (max(tmp_vec) - min(tmp_vec)) / 2 + min(tmp_vec),
-        high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
-      ) + 
-      labs(color = paste0(programID, '(normalized)'))
+    if (raster) {
+      p_umap2 = plt_df %>% arrange(norm_program) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'norm_program'
+        )) +
+        # geom_point(...) +
+        # ggrastr::rasterise(geom_point(...), dpi = 75) +
+        ggrastr::rasterise(geom_point(...), dpi = 300) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = (max(tmp_vec) - min(tmp_vec)) / 2 + min(tmp_vec),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Program activity\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    } else {
+      p_umap2 = plt_df %>% arrange(norm_program) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'norm_program'
+        )) +
+        # geom_point(...) +
+        # ggrastr::rasterise(geom_point(...), dpi = 75) +
+        geom_point(...) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = (max(tmp_vec) - min(tmp_vec)) / 2 + min(tmp_vec),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Program activity\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    }
     
   } else {
-  p_umap = plt_df %>% arrange(geneMeanScore) %>% 
-    ggplot(aes_string(
-      x = colnames(plt_df)[2],
-      y = colnames(plt_df)[3],
-      color = 'geneMeanScore'
-    )) +
-    geom_point(...) +
-    scale_color_gradient2(
-      low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
-      mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
-      midpoint = with(plt_df, (max(geneMeanScore) - min(geneMeanScore)) / 2 + min(geneMeanScore)),
-      high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
-    )
-  
-  tmp_vec = plt_df[[programID]]
-  p_umap2 = plt_df %>% arrange({{programID}}) %>% 
-    ggplot(aes_string(
-      x = colnames(plt_df)[2],
-      y = colnames(plt_df)[3],
-      color = programID
-    )) +
-    geom_point(...) +
-    scale_color_gradient2(
-      low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
-      mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
-      midpoint = (max(tmp_vec)-min(tmp_vec))/2 + min(tmp_vec),
-      high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
-    )
+    if (raster) {
+      p_umap = plt_df %>% arrange(geneMeanScore) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'geneMeanScore'
+        )) +
+        # geom_point(...) +
+        # ggrastr::rasterise(geom_point(...), dpi = 75) +
+        ggrastr::rasterise(geom_point(...), dpi = 300) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = with(plt_df, (
+            max(geneMeanScore) - min(geneMeanScore)
+          ) / 2 + min(geneMeanScore)),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Mean expression\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    } else {
+      p_umap = plt_df %>% arrange(geneMeanScore) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = 'geneMeanScore'
+        )) +
+        # geom_point(...) +
+        # ggrastr::rasterise(geom_point(...), dpi = 75) +
+        geom_point(...) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = with(plt_df, (
+            max(geneMeanScore) - min(geneMeanScore)
+          ) / 2 + min(geneMeanScore)),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Mean expression\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+    }
+    
+    tmp_vec = plt_df[[programID]]
+    if (raster) {
+      p_umap2 = plt_df %>% arrange({
+        {
+          programID
+        }
+      }) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = programID
+        )) +
+        # geom_point(...) +
+        # ggrastr::rasterise(geom_point(...), dpi = 75) +
+        ggrastr::rasterise(geom_point(...), dpi = 300) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = (max(tmp_vec) - min(tmp_vec)) / 2 + min(tmp_vec),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Program activity\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+      
+    } else {
+      p_umap2 = plt_df %>% arrange({
+        {
+          programID
+        }
+      }) %>%
+        ggplot(aes_string(
+          x = colnames(plt_df)[2],
+          y = colnames(plt_df)[3],
+          color = programID
+        )) +
+        geom_point(...) +
+        scale_color_gradient2(
+          low = RColorBrewer::brewer.pal(3, 'YlGnBu')[1],
+          mid = RColorBrewer::brewer.pal(3, 'YlGnBu')[2],
+          midpoint = (max(tmp_vec) - min(tmp_vec)) / 2 + min(tmp_vec),
+          high = RColorBrewer::brewer.pal(3, 'YlGnBu')[3]
+        ) +
+        labs(color = 'Program activity\n(Scaled)',
+             title = paste0(
+               'cProgram ',
+               str_extract(pattern = '(\\d+)$', programID)
+             )) +
+        theme(plot.background = element_blank())
+    }
+    
   }
   
-  if(!is.null(normalize_by)){
+  if (!is.null(normalize_by)) {
     cor_res = cor.test(plt_df[[programID]], plt_df$norm_score, method = 'pearson')
-    p_cor = plt_df %>% 
-      ggplot(aes_string(x = programID, y = "norm_score")) +
+    p_cor = plt_df %>%
+      ggplot(aes_string(x = sprintf("`%s`", programID), y = "norm_score")) +
       geom_point(aes(color = group)) +
-      geom_smooth(method = 'lm') +
-      labs(title =
-             ifelse(
-               cor_res$p.value == 0,
-               sprintf('Cor = %s\nP.val < 2.20e-16', round(cor_res$estimate, 4)),
-               sprintf(
-                 'Cor = %s\nP.val = %s',
-                 round(cor_res$estimate, 4),
-                 formatC(cor_res$p.value, digits = 2, format = 'e')
-               )
-             ))
+      geom_smooth(aes(color = group),
+                  method = 'lm',
+                  formula = y ~ x) +
+      labs(
+        title =
+          ifelse(
+            cor_res$p.value == 0,
+            sprintf('Cor = %s\nP.val < 2.20e-16', round(cor_res$estimate, 4)),
+            sprintf(
+              'Cor = %s\nP.val = %s',
+              round(cor_res$estimate, 4),
+              formatC(cor_res$p.value, digits = 2, format = 'e')
+            )
+          ),
+        x = paste0(
+          'Program activity (cProgram ',
+          str_extract(pattern = '(\\d+)$', programID),
+          ')'
+        ),
+        y = 'Mean expression(Scaled)'
+      ) +
+      theme(plot.background = element_blank())
   } else {
     cor_res = cor.test(plt_df[[programID]], plt_df$geneMeanScore, method = 'pearson')
     p_cor = plt_df %>%
-      ggplot(aes_string(x = programID, y = "geneMeanScore")) +
+      ggplot(aes_string(x = sprintf("`%s`", programID), y = "geneMeanScore")) +
       geom_point() +
-      geom_smooth(method = 'lm') +
-      labs(title =
-             ifelse(
-               cor_res$p.value == 0,
-               sprintf('Cor = %s\nP.val < 2.20e-16', round(cor_res$estimate, 4)),
-               sprintf(
-                 'Cor = %s\nP.val = %s',
-                 round(cor_res$estimate, 4),
-                 formatC(cor_res$p.value, digits = 2, format = 'e')
-               )
-             ))
+      geom_smooth(method = 'lm', formula = y ~ x) +
+      labs(
+        title =
+          ifelse(
+            cor_res$p.value == 0,
+            sprintf('Cor = %s\nP.val < 2.20e-16', round(cor_res$estimate, 4)),
+            sprintf(
+              'Cor = %s\nP.val = %s',
+              round(cor_res$estimate, 4),
+              formatC(cor_res$p.value, digits = 2, format = 'e')
+            )
+          ),
+        x = paste0(
+          'Program activity (cProgram ',
+          str_extract(pattern = '(\\d+)$', programID),
+          ')'
+        ),
+        y = 'Mean expression'
+      ) +
+      theme(plot.background = element_blank())
     
   }
   
-  p_umapall = patchwork::wrap_plots(p_umap, p_umap2, p_cor, design = "AB\nCC")
+  p_umapall = patchwork::wrap_plots(p_umap, p_umap2, p_cor, design = "AB\nCC") +
+    patchwork::plot_annotation(title = paste0(
+      'Correlation between gene expression and cProgram ',
+      str_extract(pattern = '(\\d+)$', programID)
+    ))
   
   # if (plot_each) {
   #   return(list(
-  #     genes = genes, 
+  #     genes = genes,
   #     umaps = plt_lst,
   #     all = p_umapall
   #   ))
   # }
-  return(list(genes = genes,
-              all = p_umapall,
-              plt_df = plt_df))
+  return(
+    list(
+      genes = genes,
+      p_umap = p_umap,
+      p_umap2 = p_umap2,
+      p_cor = p_cor,
+      all = p_umapall,
+      plt_df = plt_df
+    )
+  )
+}
+
+
+#' Extract and scale the data for ploting
+#' 
+#' @param seurat_obj A seurat object that holds the expresssion information and tSNE coordinates.
+#' @param nmf_obj cNMF object from `identifyConsensusProgram`
+#' @param genes The name(s) of genes to plot 
+#' @param cells The name(s) of cells to plot 
+#' @param top_n_genes Top n genes to use, if `genes` is not specified, default = 1000.
+#' @param reduction String, the name of the reduction to use, default tsne.
+#' @param programID Name of the program to check, default cProgram 01.
+#' @param ... Arguments for geom_point
+#' @return A tbl/df
+#' 
+#' @importFrom rlang !! :=
+#' @export
+#' 
+extractProgramData = function(seurat_obj,
+                            nmf_obj,
+                            genes = NULL,
+                            cells = NULL,
+                            top_n_genes = 1000,
+                            reduction = 'tsne',
+                            programID = 'cProgram 01',
+                            ...) {
+  if (is.null(genes)) {
+    genes = names(tail(sort(nmf_obj$consensus_W[, programID]), n = top_n_genes))
+  }
+  
+  chosen_features = intersect(genes, rownames(seurat_obj@assays$RNA@data))
+  plt_df = as.data.frame(seurat_obj@reductions[[reduction]]@cell.embeddings) %>%
+    mutate(.before = 1,
+           cellID = rownames(seurat_obj@reductions[[reduction]]@cell.embeddings))
+  
+  if(!is.null(cells)){
+    plt_df = plt_df %>% dplyr::filter(cellID %in% cells)
+  }
+  
+  # Plot correlation with program value
+  origin_score = nmf_obj$consensus_H[programID,][plt_df$cellID]
+  scaled_program_score = (origin_score - min(origin_score))/(max(origin_score) - min(origin_score))
+  names(scaled_program_score) = names(origin_score)
+  plt_df = plt_df %>% 
+    mutate(target_program = programID, 
+           program_score = scaled_program_score)
+  
+  meanScores_vec =
+    apply(Matrix::t(seurat_obj@assays$RNA@data[chosen_features, plt_df$cellID]), 2, function(x) {
+      (x - min(x)) / (max(x) - min(x))
+    }) %>% rowMeans()
+  
+  plt_df = plt_df %>% mutate(topGeneMeanScore = meanScores_vec[cellID]) %>% arrange(topGeneMeanScore)
+  
+  
+  return(plt_df)
 }
 
 
 #' Plot the enrichment for celltypes DEGs using the related genes of a given program
 #' 
 #' @param nmf_obj cNMF object from `identifyConsensusProgram`
-#' @param programID Name of the program to check, default MergedProgram_01.
+#' @param programID Name of the program to check, default cProgram 01.
 #' @param TERM2GENE A data.frame pass to `clusterProfiler::GSEA`
 #' @param all_types A string of all the cell types.
 #' @param genes A ranked and named genes vector. Default NULL.
@@ -2999,11 +3438,12 @@ plotProgramGenes = function(seurat_obj,
 #' 
 plotEnrichCelltypes = function(
   nmf_obj,
-  programID = 'MergedProgram_01',
+  programID = 'cProgram 01',
   TERM2GENE, 
   all_types,
   genes = NULL,
   top_n_genes = 1000, 
+  max_frac = NULL,
   maxGSSize = Inf, 
   verbose = TRUE, 
   GSEA_args = list(), 
@@ -3040,12 +3480,32 @@ plotEnrichCelltypes = function(
                                      gseaplot_args))
   }
   
-  enr_res = do.call(what = clusterProfiler::enricher, args = c(list(
-    names(head(genes, top_n_genes)),
-    TERM2GENE = TERM2GENE,
-    universe = all_genes,
-    maxGSSize = Inf
-  ), enricher_args))
+  if(!is.null(top_n_genes)) {
+    enr_res = do.call(what = clusterProfiler::enricher,
+                      args = c(
+                        list(
+                          names(head(genes, top_n_genes)),
+                          TERM2GENE = TERM2GENE,
+                          universe = all_genes,
+                          maxGSSize = Inf
+                        ),
+                        enricher_args
+                      ))
+  } else if (!is.null(max_frac)){
+    frac_cutoff = max(genes) * max_frac
+    enr_res = do.call(what = clusterProfiler::enricher,
+                      args = c(
+                        list(
+                          names(genes)[genes > frac_cutoff],
+                          TERM2GENE = TERM2GENE,
+                          universe = all_genes,
+                          maxGSSize = Inf
+                        ),
+                        enricher_args
+                      ))
+  } else {
+    stop('Neither max_frac or top_n_genes is specified.')
+  }
   
   enr_df = as.data.frame(enr_res)
   # gsea_res %>% as.data.frame() %>% View()
@@ -3055,5 +3515,24 @@ plotEnrichCelltypes = function(
     enrich_obj = enr_res,
     gsea_plots = gsea_plt_lst
   ))
+}
+
+#' Get the lower triangle of a symmetric matrix
+#'
+#' @param x_mt A symmetric matrix
+#' @param keep_diag Logical. Keep diagonal values or not.
+#' @return A data.frame
+#' @export 
+getLowerTri2df = function(x_mt, keep_diag = T){
+  stopifnot(all(rownames(x_mt) == colnames(x_mt)))
+  
+  clusters = rownames(x_mt)
+  row_tags = clusters[row(x_mt)]
+  col_tags = clusters[col(x_mt)]
+  low_idx = lower.tri(x_mt, diag = keep_diag)
+  
+  out_df = data.frame(row_tag = row_tags[low_idx], col_tag = col_tags[low_idx], 
+                      value = x_mt[low_idx])
+  return(out_df)
 }
 
