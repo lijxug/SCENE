@@ -17,7 +17,7 @@ The goal of SCENE is to …
 
 The cairo library is needed. 
 For Ubuntu
-``` r
+``` shell
 apt-get install libcairo2-dev
 ```
 
