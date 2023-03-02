@@ -5,21 +5,33 @@
 \title{Visualize different co-varying pattern in contexts
 This function visualize the results of program pairs that are influenced significantly by the context, for each program pair, it includes the model and the summary}
 \usage{
-visualizeDiffContext(bulk_pg_dH_mt, res_lr, context_num_tbl, plt_dir = NULL)
+visualizeDiffContext(
+  bulk_pg_dH_mt,
+  test_df = NULL,
+  context_num_tbl,
+  cor_method = "spearman",
+  both = T,
+  max_row = 30,
+  plt_dir = NULL
+)
 }
 \arguments{
 \item{bulk_pg_dH_mt}{a matrix, with columns as programs, rows as bulk samples, calculated as \code{d} \%*\% \code{H}, where \code{d} and \code{H} are from \code{cNMF}}
 
-\item{res_lr}{a list, result of \code{detectDiffContext}}
+\item{test_df}{a data.frame, with columns \code{Prog1} and \code{Prog2}}
 
 \item{context_num_tbl}{a tibble, result of \code{preprocess}}
+
+\item{cor_method}{A correlation method passed to \code{cor.test}}
+
+\item{both}{Default = TRUE, return both signifcant.}
+
+\item{max_row}{Maximum number of rows in test_df to plot.}
 
 \item{plt_dir}{a string specify the ploting directory, default NULL}
 }
 \value{
 A list of plots
-
-detectDiffContext
 }
 \description{
 Visualize different co-varying pattern in contexts

@@ -11,7 +11,7 @@ plotProgramGenes(
   top_n_genes = 1000,
   reduction = "tsne",
   normalize_by = NULL,
-  programID = "MergedProgram_01",
+  programID = "cProgram 01",
   raster = T,
   ...
 )
@@ -29,7 +29,7 @@ plotProgramGenes(
 
 \item{normalize_by}{A named group vector. Default NULL. When specified, the values would be normalize by the maximum number according to group.}
 
-\item{programID}{Name of the program to check, default MergedProgram_01.}
+\item{programID}{Name of the program to check, default cProgram 01.}
 
 \item{...}{Arguments for geom_point}
 }

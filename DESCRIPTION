@@ -1,6 +1,6 @@
 Package: SCENE 
 Title: A tool to identify cell types correlation utilizing bulk data
-Version: 0.2
+Version: 0.3
 Authors@R:
     c(person(given = "Jason",
            family = "Li",
@@ -23,7 +23,7 @@ Imports:
   stringr, pbmcapply, pbapply, dplyr, ggplot2, 
   patchwork, kneer, tictoc, entropy, optparse,
   clusterProfiler, leiden, RColorBrewer,
-  RcppParallel, RcppML, parallelDist,  checkmate, proxyC, 
+  RcppParallel, RcppML, parallelDist, checkmate, proxyC, 
   tibble, Seurat
 Suggests:
   ggrastr

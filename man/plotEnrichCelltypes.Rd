@@ -6,11 +6,12 @@
 \usage{
 plotEnrichCelltypes(
   nmf_obj,
-  programID = "MergedProgram_01",
+  programID = "cProgram 01",
   TERM2GENE,
   all_types,
   genes = NULL,
   top_n_genes = 1000,
+  max_frac = NULL,
   maxGSSize = Inf,
   verbose = TRUE,
   GSEA_args = list(),
@@ -21,7 +22,7 @@ plotEnrichCelltypes(
 \arguments{
 \item{nmf_obj}{cNMF object from \code{identifyConsensusProgram}}
 
-\item{programID}{Name of the program to check, default MergedProgram_01.}
+\item{programID}{Name of the program to check, default cProgram 01.}
 
 \item{TERM2GENE}{A data.frame pass to \code{clusterProfiler::GSEA}}
 
