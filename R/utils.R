@@ -2442,7 +2442,7 @@ processConsensusProgram = function(merged_program_mt,
 #' @return A named list
 #' @export
 #' 
-checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
+checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1, raster = F) {
   
   # require(ggplot2)
   # require(dplyr)
@@ -2461,8 +2461,8 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
       reduction = "tsne",
       features = sprintf('cProgram %.2d', i_program),
       order = T,
-      raster = T, 
-      pt.size = 3 
+      raster = T,
+      pt.size = 3
     )
     # hist_plt_lst2 =
     tmp_plt = seurat_obj@meta.data[, c('name',
@@ -2471,28 +2471,59 @@ checkConsensusProgram = function(seurat_obj, program_mt, program_cutoff = 0.1) {
                                        'source',
                                        sprintf('cProgram %.2d', i_program))]
     colnames(tmp_plt) = c('name', 'type', 'celltype', 'source', 'ProgramValue')
-    p2 =
-      tmp_plt %>% ggplot(aes(
-        x = reorder(name, ProgramValue),
-        y = ProgramValue,
-        color = type
-      )) +
-      ggrastr::rasterise(geom_point(
-        alpha = .5,
-        shape = 'o',
-        size = 6
-      )) +
-      geom_hline(
-        yintercept = max(tmp_plt$ProgramValue, na.rm = T) * program_cutoff,
-        linetype = 2
-      ) +
-      theme_classic(base_size = 16) +
-      theme(
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.ticks.x = element_blank()
-      ) +
-      labs(title = sprintf('cProgram %.2d', i_program))
+    
+    if(!requireNamespace("ggrastr", quietly = TRUE)){
+      warning('ggrastr not installed. Setting `raster` to FALSE')
+      raster = F
+    }
+    
+    if (raster) {
+      p2 =
+        tmp_plt %>% ggplot(aes(
+          x = reorder(name, ProgramValue),
+          y = ProgramValue,
+          color = type
+        )) +
+        ggrastr::rasterise(geom_point(
+          alpha = .5,
+          shape = 'o',
+          size = 6
+        )) +
+        geom_hline(
+          yintercept = max(tmp_plt$ProgramValue, na.rm = T) * program_cutoff,
+          linetype = 2
+        ) +
+        theme_classic(base_size = 16) +
+        theme(
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank()
+        ) +
+        labs(title = sprintf('cProgram %.2d', i_program))
+    } else {
+      p2 =
+        tmp_plt %>% ggplot(aes(
+          x = reorder(name, ProgramValue),
+          y = ProgramValue,
+          color = type
+        )) +
+        geom_point(
+          alpha = .5,
+          shape = 'o',
+          size = 6
+        ) +
+        geom_hline(
+          yintercept = max(tmp_plt$ProgramValue, na.rm = T) * program_cutoff,
+          linetype = 2
+        ) +
+        theme_classic(base_size = 16) +
+        theme(
+          axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.ticks.x = element_blank()
+        ) +
+        labs(title = sprintf('cProgram %.2d', i_program))
+    }
     return(list(p1 = p1, p2 = p2))
   })
   
