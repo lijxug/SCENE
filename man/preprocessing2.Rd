@@ -10,8 +10,8 @@ preprocessing2(
   celltypes,
   top_gene_ratio = 0.5,
   logarithmetic = T,
-  scaling = T,
-  quantile_normalization = F,
+  scaling = F,
+  quantile_normalization = T,
   downsample_size = NULL,
   draw_now = T,
   verbose = T

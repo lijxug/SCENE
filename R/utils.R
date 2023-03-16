@@ -4,6 +4,7 @@
 #' @import patchwork
 #' @import dplyr 
 #' @import tictoc
+
 NULL
 
 # Calculation ----
@@ -13,7 +14,7 @@ NULL
 #' @param rho The target correlation
 #' @param x A vector to start with. If specified, it must have the same length as `y`
 #' @export
-#' 
+#' @importFrom magrittr `%>%`
 #' 
 complementCor = function(y, rho, x) {
   if (missing(x)) x <- rnorm(length(y)) # Optional: supply a default if `x` is not given
@@ -21,29 +22,6 @@ complementCor = function(y, rho, x) {
   rho * sd(y.perp) * y + y.perp * sd(y) * sqrt(1 - rho^2)
 }
 
-# calc_CC = function(x, ...){
-#   args = list(...)
-#   n_cores = ifelse(is.null(args$n_cores), 1, args$n_cores)
-#   # w_dist_mt = as.matrix(dist(x))
-#   if(n_cores == 1) {
-#     w_dist_mt = as.matrix(stats::dist(x))
-#   } else {
-#     w_dist_mt = as.matrix(parallelDist::parDist(x, threads = n_cores))
-#   }
-#   # w_dist_mt = as.matrix(w_dist)
-#   hc_obj = hclust(w_dist)
-#   cc_dist = cophenetictoc::tic(hc_obj)
-#   cc_mt = as.matrix(cc_dist)
-#   
-#   checkmate::assert(all(rownames(cc_mt) == rownames(w_dist_mt)))
-#   checkmate::assert(all(colnames(cc_mt) == colnames(w_dist_mt)))
-#   
-#   cor_df = data.frame(
-#     euc_dist = w_dist_mt[upper.tri(cc_mt, diag = F)], 
-#     coph_dist = cc_mt[upper.tri(cc_mt, diag = F)])
-#   
-#   return(cor(cor_df$euc_dist, cor_df$coph_dist, method = "pearson"))
-# }
 
 calc_err = function(origin_mt, nmf_obj){
   if(is.matrix(origin_mt)){
@@ -54,10 +32,7 @@ calc_err = function(origin_mt, nmf_obj){
     err_mt = origin_mt - prod_nmf
     err_value = sqrt(sum(err_mt ^ 2)) / length(origin_mt)
   }
-  # frobenius_err = sum(abs(err_mt))
   return(err_value)
-  # system.time({frobenius_err = sum(err_mt ^ 2)})
-  # system.time({frobenius_err2 = sum(diag(t(err_mt) %*% err_mt))})
 }
 
 calc_jac = function(cor_mt, threshold = 0.9){
@@ -270,6 +245,7 @@ calc_TPM = function(x){
 #' @param n_cores Integer. Default using all cores.
 #' @return A differential expression table.
 #' @export
+#' @importFrom magrittr `%>%`
 #' 
 select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n_cores = 0){
   # require(JasonToolBox)
@@ -341,6 +317,9 @@ select_features_sc = function(X, celltypes, batches = NULL, method = 'wilcox', n
   return(celltypes_de_tbl)
 }
 
+#' Differential expression analysis using wilcox test
+#' 
+#' @importFrom magrittr `%>%`
 dea.wilcox = function (mt1_origin, mt2_origin, down_size = 5000, n_cores = 1, onlyPos = T,...){
   # mt1_origin = x[[1]]
   # mt2_origin = x[[2]]
@@ -811,6 +790,7 @@ select_features = function(X, loess_span = 0.3, high_quantile = 0.5){
 #' @param verbose Logical, default TRUE
 #' @return A named list
 #' @export
+#' @importFrom magrittr `%>%`
 #' 
 preprocessing2 = function(sc_data,
                           bulk_data,
@@ -1022,6 +1002,7 @@ preprocessing2 = function(sc_data,
 #' @param verbose Logical, default TRUE
 #' @return A named list
 #' @export
+#' @importFrom magrittr `%>%`
 #' 
 preprocessing3 = function(sc_data,
                           bulk_data,
@@ -1272,7 +1253,7 @@ findKnee = function(x, y , ...) {
 #' @param ... Other parameters for kneer::create_knee_locator
 #' @return A named list
 #' @export
-#' @importFrom dplyr `%>%`
+#' @importFrom magrittr `%>%`
 #'
 identifyKnee = function(x, y, direction = 'down', draw_now = T, ...){
   
