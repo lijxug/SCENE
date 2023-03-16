@@ -3125,6 +3125,10 @@ plotProgramGenes = function(seurat_obj,
       mutate(norm_score = (geneMeanScore - min(geneMeanScore)) / (max(geneMeanScore) -
                                                                     min(geneMeanScore)))
     
+    if(!requireNamespace("ggrastr", quietly = TRUE)){
+      warning('ggrastr not installed. Setting `raster` to FALSE')
+      raster = F
+    }
     if (raster) {
       p_umap = plt_df %>% arrange(norm_score) %>%
         ggplot(aes_string(
@@ -3142,7 +3146,7 @@ plotProgramGenes = function(seurat_obj,
         labs(color = 'Mean expression\n(Scaled)',
              title = paste0(
                'cProgram ',
-               str_extract(pattern = '(\\d+)$', programID)
+               stringr::str_extract(pattern = '(\\d+)$', programID)
              )) +
         theme(plot.background = element_blank())
       
