@@ -2272,7 +2272,7 @@ identifyConsensusProgram3 = function(NMFs,
   # norm_dist_mtmt = as.matrix(norm_dist_mt)
   
   if (return_plot) {
-    p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% enframe() %>%
+    p1 = norm_dist_mt[, sample(colnames(norm_dist_mt), 1)] %>% tibble::enframe() %>%
       ggplot(aes(x = reorder(name, value), y = value)) +
       geom_point() +
       geom_vline(xintercept = n_reps) +
@@ -2304,7 +2304,7 @@ identifyConsensusProgram3 = function(NMFs,
   })
   
   if (return_plot) {
-    p2 = median_knn_dists %>% enframe() %>%
+    p2 = median_knn_dists %>% tibble::enframe() %>%
       mutate(cluster = factor(value > neighbor_dist_cutoff)) %>%
       ggplot(aes(x = value, fill = cluster)) +
       geom_histogram(bins = 50) +
