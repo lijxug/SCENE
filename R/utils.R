@@ -1618,7 +1618,7 @@ determineK = function(data_obj, draw_now = F, verbose = T, ...) {
     return(entropy::entropy(x, method = 'ML', unit = 'log2') / H)
   })
   
-  p_entropy_dist = w_entr_vec %>% enframe() %>% ggplot(aes(x = value)) +
+  p_entropy_dist = w_entr_vec %>% tibble::enframe() %>% ggplot(aes(x = value)) +
     geom_histogram(bins = 50) +
     geom_vline(xintercept = median(w_entr_vec)) +
     labs(
