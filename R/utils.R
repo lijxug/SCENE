@@ -2758,7 +2758,7 @@ calcCorrelative3 = function(program_mt,
   bulk_cut_mt = program_mt[, bulksID]
   
   progs2run_idx = rowSums(bulk_cut_mt > 0) > round(nonzero_ratio * length(bulksID))
-  progs2run = names(progs2run_idx)[progs2run_idx]
+  progs2run = sort(names(progs2run_idx)[progs2run_idx])
   
   bulk_cut_mt = program_mt[progs2run, bulksID]
   
