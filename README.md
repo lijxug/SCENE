@@ -11,7 +11,6 @@ v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/li
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-The goal of SCENE is to …
 
 ## Installation
 
@@ -30,6 +29,7 @@ devtools::install_github("lijxug/SCENE")
 ```
 
 ## Example
+Available at Code Ocean, capsule id 
 
 <!-- This is a basic example which shows you how to solve a common problem: -->
 <!-- ```{r example} -->
