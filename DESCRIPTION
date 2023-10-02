@@ -1,6 +1,6 @@
 Package: SCENE
 Title: A tool to identify cell types correlation utilizing bulk data
-Version: 0.3
+Version: 1.0
 Authors@R:
     c(person(given = "Jason",
            family = "Li",
