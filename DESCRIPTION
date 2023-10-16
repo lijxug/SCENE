@@ -23,7 +23,7 @@ Imports:
   stringr, pbmcapply, pbapply, dplyr, ggplot2, 
   patchwork, kneer, tictoc, entropy, optparse,
   clusterProfiler, leiden, RColorBrewer,
-  RcppParallel, RcppML, parallelDist, checkmate, proxyC, 
+  RcppParallel, RcppML, checkmate, proxyC, 
   tibble, Seurat
 Suggests:
   ggrastr
