@@ -28,8 +28,8 @@ You can install the development version from
 devtools::install_github("lijxug/SCENE")
 ```
 
-## Example
-Available at Code Ocean, capsule id `453d3f28-06c1-482f-8850-254fd4a4b4e6`
+## Demo
+Currently available at Code Ocean under private link  https://codeocean.com/capsule/7693770
 
 <!-- This is a basic example which shows you how to solve a common problem: -->
 <!-- ```{r example} -->
