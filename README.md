@@ -11,14 +11,9 @@ v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/li
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
+SCENE is a analytic tool for dissecting cellular cohabitation using single-cell and bulk RNA-seq data.
 
 ## Installation
-
-<!-- You can install the released version of SCENE from [CRAN](https://CRAN.R-project.org) with: -->
-<!-- ``` r -->
-<!-- install.packages("SCENE") -->
-<!-- ``` -->
-<!-- And the development version from [GitHub](https://github.com/) with: -->
 
 You can install the development version from
 [GitHub](https://github.com/) with:
@@ -28,8 +23,18 @@ You can install the development version from
 devtools::install_github("lijxug/SCENE")
 ```
 
-## Demo
-Currently available at Code Ocean (Capsule DOI: 10.24433/CO.4624314.v1) under a private link  https://codeocean.com/capsule/7693770
+## Documentation
+Full documentation is being drafting and will be online soon.
+A demo case is currently available at Code Ocean (Capsule DOI: 10.24433/CO.4624314.v1) under [a private link](https://codeocean.com/capsule/7693770).
+
+## Release Notes
+- version 1.0: First released version
+
+## Lisence
+The code is released under the GNU GPL-3 License.
+
+## Platform
+SCENE is developed and tested on Linux-based machines.
 
 <!-- This is a basic example which shows you how to solve a common problem: -->
 <!-- ```{r example} -->
