@@ -29,7 +29,7 @@ devtools::install_github("lijxug/SCENE")
 ```
 
 ## Demo
-Currently available at Code Ocean under private link  https://codeocean.com/capsule/7693770
+Currently available at Code Ocean (Capsule DOI: 10.24433/CO.4624314.v1) under a private link  https://codeocean.com/capsule/7693770
 
 <!-- This is a basic example which shows you how to solve a common problem: -->
 <!-- ```{r example} -->
