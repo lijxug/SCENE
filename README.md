@@ -17,7 +17,7 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 ### Hardware Requirements
 The `SCENE` package requires computers with enough RAM to support the operations defined by a user.
-Applying SCENE on 5000 samples (comprising single cells and bulk samples) requires about 12 GB of RAM and about 40 minutes to complete all calculation tasks on a workstation with 96 CPU threads. For larger cohorts, we recommend running the following functions on a high performance computer cluster and visualizing the results locally: `preprocessing2`, `determineK_runNMF`, `runcNMF`, and `identifyConsensusProgram3`.
+Applying SCENE on 5000 samples (comprising single cells and bulk samples) requires about 12 GB of RAM and about 40 minutes to complete all calculation tasks on a workstation with 96 CPU threads(Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz). For larger cohorts, we recommend running the following functions on a high performance computer cluster and visualizing the results locally: `preprocessing2`, `determineK_runNMF`, `runcNMF`, and `identifyConsensusProgram3`.
 
 ### Software Requirements
 The `SCENE` development version is developed and tested on *Linux* operating systems. The developmental version of the package has been tested on the following systems:
