@@ -25,7 +25,7 @@ devtools::install_github("lijxug/SCENE")
 
 ## Documentation
 Full documentation is being drafting and will be online soon.
-A demo case is currently available at Code Ocean (Capsule DOI: 10.24433/CO.4624314.v1) under [a private link](https://codeocean.com/capsule/7693770).
+A demo case is currently available at Code Ocean (Capsule DOI: 10.24433/CO.4624314.v1) [here](https://codeocean.com/capsule/7693770).
 
 ## Release Notes
 - version 1.0: First released version
