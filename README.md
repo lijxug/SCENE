@@ -22,8 +22,8 @@ Applying SCENE on 5000 samples (comprising single cells and bulk samples) requir
 ### Software Requirements
 The `SCENE` development version is developed and tested on *Linux* operating systems. The developmental version of the package has been tested on the following systems:
 
-Linux: Ubuntu 20.04
-MacOS: Sonoma 14.0 (23A344)
+- Linux: Ubuntu 20.04
+- MacOS: Sonoma 14.0 (23A344)
 
 Before setting up the `SCENE` package, users should have `R` version 4.0.5 or higher installed.
 
